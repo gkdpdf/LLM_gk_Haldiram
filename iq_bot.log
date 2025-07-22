@@ -1,0 +1,137 @@
+2025-07-22 14:48:08,740 - INFO - Environment variables loaded successfully
+2025-07-22 14:48:08,934 - INFO - LLM initialized successfully
+2025-07-22 14:48:08,941 - INFO - Validated CSV file: cooked_data_gk/orders.csv
+2025-07-22 14:48:08,942 - INFO - Validated CSV file: cooked_data_gk/sub_d_orders.csv
+2025-07-22 14:48:08,944 - INFO - Validated CSV file: cooked_data_gk/tbl_distributor_details.csv
+2025-07-22 14:48:08,945 - INFO - Validated CSV file: cooked_data_gk/tbl_sales.csv
+2025-07-22 14:48:08,945 - INFO - Validated CSV file: cooked_data_gk/tbl_product_master.csv
+2025-07-22 14:48:08,946 - INFO - Validated CSV file: cooked_data_gk/sub_d_order_items.csv
+2025-07-22 14:48:08,947 - INFO - Validated CSV file: cooked_data_gk/tbl_price_margin.csv
+2025-07-22 14:48:08,947 - INFO - Validated CSV file: cooked_data_gk/order_items.csv
+2025-07-22 14:48:08,948 - INFO - Validated CSV file: cooked_data_gk/tbl_scheme.csv
+2025-07-22 14:48:08,953 - INFO - Successfully loaded table: orders with 15 rows
+2025-07-22 14:48:08,954 - INFO - Successfully loaded table: sub_d_orders with 10 rows
+2025-07-22 14:48:08,963 - INFO - Successfully loaded table: tbl_distributor_details with 470 rows
+2025-07-22 14:48:08,964 - INFO - Successfully loaded table: tbl_sales with 27 rows
+2025-07-22 14:48:08,966 - INFO - Successfully loaded table: tbl_product_master with 11 rows
+2025-07-22 14:48:08,966 - INFO - Successfully loaded table: sub_d_order_items with 28 rows
+2025-07-22 14:48:08,967 - INFO - Successfully loaded table: tbl_price_margin with 5 rows
+2025-07-22 14:48:08,968 - INFO - Successfully loaded table: order_items with 34 rows
+2025-07-22 14:48:08,970 - INFO - Successfully loaded table: tbl_scheme with 6 rows
+2025-07-22 14:48:08,982 - INFO - Database configured with tables: ['orders', 'sub_d_orders', 'tbl_distributor_details', 'tbl_sales', 'tbl_product_master', 'sub_d_order_items', 'tbl_price_margin', 'order_items', 'tbl_scheme']
+2025-07-22 14:48:08,983 - INFO - SQL toolkit initialized successfully
+2025-07-22 14:48:08,984 - INFO - Agent initialized successfully
+2025-07-22 14:48:16,829 - INFO - Environment variables loaded successfully
+2025-07-22 14:48:16,846 - INFO - SQL toolkit initialized successfully
+2025-07-22 14:48:16,856 - INFO - Agent initialized successfully
+2025-07-22 14:48:17,490 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-22 14:48:18,084 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-22 14:48:18,451 - ERROR - Unexpected error in assistant processing: Traceback (most recent call last):
+  File "/Users/gaurav/Desktop/LLM/crazibrain-retail-llm/app_gk.py", line 624, in <module>
+    response = agent.run(user_query)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain_core/_api/deprecation.py", line 189, in warning_emitting_wrapper
+    return wrapped(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain/chains/base.py", line 603, in run
+    return self(args[0], callbacks=callbacks, tags=tags, metadata=metadata)[
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain_core/_api/deprecation.py", line 189, in warning_emitting_wrapper
+    return wrapped(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain/chains/base.py", line 386, in __call__
+    return self.invoke(
+           ^^^^^^^^^^^^
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain/chains/base.py", line 167, in invoke
+    raise e
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain/chains/base.py", line 157, in invoke
+    self._call(inputs, run_manager=run_manager)
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain/agents/agent.py", line 1620, in _call
+    next_step_output = self._take_next_step(
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain/agents/agent.py", line 1326, in _take_next_step
+    [
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain/agents/agent.py", line 1326, in <listcomp>
+    [
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain/agents/agent.py", line 1411, in _iter_next_step
+    yield self._perform_agent_action(
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain/agents/agent.py", line 1433, in _perform_agent_action
+    observation = tool.run(
+                  ^^^^^^^^^
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain_core/tools/base.py", line 883, in run
+    raise error_to_raise
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain_core/tools/base.py", line 852, in run
+    response = context.run(self._run, *tool_args, **tool_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gaurav/Desktop/LLM/llmgk/lib/python3.11/site-packages/langchain_core/tools/simple.py", line 105, in _run
+    return self.func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: safe_describe_table_relationships() takes 0 positional arguments but 1 was given
+
+2025-07-22 14:48:29,323 - INFO - Environment variables loaded successfully
+2025-07-22 14:48:29,333 - INFO - SQL toolkit initialized successfully
+2025-07-22 14:48:29,338 - INFO - Agent initialized successfully
+2025-07-22 14:48:29,989 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-22 14:48:30,605 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-22 14:48:31,326 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-22 14:48:31,751 - INFO - Agent response generated in 2.41 seconds
+2025-07-22 14:55:55,292 - INFO - Environment variables loaded successfully
+2025-07-22 14:55:55,487 - INFO - LLM initialized successfully
+2025-07-22 14:55:55,494 - INFO - Validated CSV file: cooked_data_gk/orders.csv
+2025-07-22 14:55:55,495 - INFO - Validated CSV file: cooked_data_gk/sub_d_orders.csv
+2025-07-22 14:55:55,497 - INFO - Validated CSV file: cooked_data_gk/tbl_distributor_details.csv
+2025-07-22 14:55:55,498 - INFO - Validated CSV file: cooked_data_gk/tbl_sales.csv
+2025-07-22 14:55:55,499 - INFO - Validated CSV file: cooked_data_gk/tbl_product_master.csv
+2025-07-22 14:55:55,499 - INFO - Validated CSV file: cooked_data_gk/sub_d_order_items.csv
+2025-07-22 14:55:55,500 - INFO - Validated CSV file: cooked_data_gk/tbl_price_margin.csv
+2025-07-22 14:55:55,500 - INFO - Validated CSV file: cooked_data_gk/order_items.csv
+2025-07-22 14:55:55,501 - INFO - Validated CSV file: cooked_data_gk/tbl_scheme.csv
+2025-07-22 14:55:55,505 - INFO - Successfully loaded table: orders with 15 rows
+2025-07-22 14:55:55,506 - INFO - Successfully loaded table: sub_d_orders with 10 rows
+2025-07-22 14:55:55,516 - INFO - Successfully loaded table: tbl_distributor_details with 470 rows
+2025-07-22 14:55:55,517 - INFO - Successfully loaded table: tbl_sales with 27 rows
+2025-07-22 14:55:55,521 - INFO - Successfully loaded table: tbl_product_master with 11 rows
+2025-07-22 14:55:55,522 - INFO - Successfully loaded table: sub_d_order_items with 28 rows
+2025-07-22 14:55:55,523 - INFO - Successfully loaded table: tbl_price_margin with 5 rows
+2025-07-22 14:55:55,524 - INFO - Successfully loaded table: order_items with 34 rows
+2025-07-22 14:55:55,527 - INFO - Successfully loaded table: tbl_scheme with 6 rows
+2025-07-22 14:55:55,540 - INFO - Database configured with tables: ['orders', 'sub_d_orders', 'tbl_distributor_details', 'tbl_sales', 'tbl_product_master', 'sub_d_order_items', 'tbl_price_margin', 'order_items', 'tbl_scheme']
+2025-07-22 14:55:55,551 - INFO - SQL toolkit initialized successfully
+2025-07-22 14:55:55,554 - INFO - Agent initialized successfully
+2025-07-22 14:56:01,390 - INFO - Environment variables loaded successfully
+2025-07-22 14:56:01,424 - INFO - SQL toolkit initialized successfully
+2025-07-22 14:56:01,426 - INFO - Agent initialized successfully
+2025-07-22 14:56:01,428 - INFO - Executing query: SELECT 
+                        (SELECT COUNT(*) FROM orders) as total_orders,
+                        (SELECT COUNT(*) FROM tbl_scheme WHERE is_active = 1) as active_schemes,
+                        (SELECT COUNT(DISTINCT Brand_Name) FROM tbl_product_master) as total_brands LIMIT 1000;
+2025-07-22 14:56:05,755 - INFO - Environment variables loaded successfully
+2025-07-22 14:56:05,808 - INFO - SQL toolkit initialized successfully
+2025-07-22 14:56:05,814 - INFO - Agent initialized successfully
+2025-07-22 14:56:05,898 - INFO - Environment variables loaded successfully
+2025-07-22 14:56:05,914 - INFO - SQL toolkit initialized successfully
+2025-07-22 14:56:05,915 - INFO - Agent initialized successfully
+2025-07-22 14:56:12,471 - INFO - Environment variables loaded successfully
+2025-07-22 14:56:12,508 - INFO - SQL toolkit initialized successfully
+2025-07-22 14:56:12,521 - INFO - Agent initialized successfully
+2025-07-22 14:56:12,524 - INFO - Executing query: SELECT p.Brand_Name, p.SKU_ID, p.MRP 
+                FROM tbl_product_master p 
+                WHERE LOWER(p.Brand_Name) LIKE LOWER('%crocin%') 
+                ORDER BY p.Brand_Name, p.MRP 
+                LIMIT 20;
+2025-07-22 14:56:12,596 - INFO - Executing query: SELECT DISTINCT Brand_Name FROM tbl_product_master ORDER BY Brand_Name LIMIT 50;
+2025-07-22 14:56:16,380 - INFO - Environment variables loaded successfully
+2025-07-22 14:56:16,415 - INFO - SQL toolkit initialized successfully
+2025-07-22 14:56:16,419 - INFO - Agent initialized successfully
+2025-07-22 14:56:16,422 - INFO - Executing query: SELECT p.Brand_Name, p.SKU_ID, p.MRP 
+                FROM tbl_product_master p 
+                WHERE LOWER(p.Brand_Name) LIKE LOWER('%eno%') 
+                ORDER BY p.Brand_Name, p.MRP 
+                LIMIT 20;
+2025-07-22 14:56:16,425 - INFO - Executing query: SELECT DISTINCT Brand_Name FROM tbl_product_master ORDER BY Brand_Name LIMIT 50;
+2025-07-22 14:56:29,387 - INFO - Environment variables loaded successfully
+2025-07-22 14:56:29,419 - INFO - SQL toolkit initialized successfully
+2025-07-22 14:56:29,425 - INFO - Agent initialized successfully
+2025-07-22 14:56:29,906 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-22 14:56:31,789 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"

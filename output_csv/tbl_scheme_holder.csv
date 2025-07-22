@@ -1,0 +1,7 @@
+insertid,scheme_holder_id,scheme_group_id,scheme_id,level,level_id,holder_type,holder_id,user_id,active,approved,end_date,created,modified,start_date,scheme_reversal,man_date_scheme
+1,4,14,1234,grouplevel,3,Outlettype,1,1,1,1,2025-07-25,2025-06-09 00:00:00,2025-06-09 22:19:40,2025-06-10,0,
+2,5,14,1235,grouplevel,3,Outlettype,1,1,1,1,2025-07-25,2025-06-09 00:00:00,2025-06-09 22:19:40,2025-06-10,0,
+3,6,14,1236,grouplevel,3,Outlettype,1,1,1,1,2025-07-25,2025-06-09 00:00:00,2025-06-09 22:19:40,2025-06-10,0,
+4,7,12,1237,grouplevel,3,Outlettype,1,1,1,1,2025-07-25,2025-06-09 00:00:00,2025-06-09 22:19:40,2025-06-10,0,
+5,8,12,1238,grouplevel,3,Outlettype,1,1,1,1,2025-07-25,2025-06-09 00:00:00,2025-06-09 22:19:40,2025-06-10,0,
+6,9,12,1239,grouplevel,3,Outlettype,1,1,1,1,2025-07-25,2025-06-09 00:00:00,2025-06-09 22:19:40,2025-06-10,0,
