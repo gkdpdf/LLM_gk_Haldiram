@@ -101,7 +101,7 @@ agent = initialize_agent(
     handle_parsing_errors=True,
     agent_kwargs={
         "system_message": """
-You are an expert SQL assistant helping query a SQLite-based retail database which gives one liner answer.
+You are an expert SQL assistant helping query a SQLite-based retail database which gives one line answer.
 
 ✅ Instructions:
 1. If table info is missing, always use `TableInfoAndExamples` first and then check for 

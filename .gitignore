@@ -3,3 +3,6 @@ __pycache__/
 ChatCSV-Llama2-Chatbot/
 older_codes/.env
 .env
+venv
+.ipynb_checkpoints/
+
