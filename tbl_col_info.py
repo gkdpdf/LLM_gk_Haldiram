@@ -96,7 +96,7 @@ def table_info_and_examples(query: str = "") -> str:
 
 ---
 
-### **6. scheme_details**
+6. scheme_details**
 | Column Name         | Data Type | Description                                   |
 |---------------------|-----------|-----------------------------------------------|
 | scheme_name         | STRING    | Name of the promotional scheme                |
@@ -117,9 +117,9 @@ def table_info_and_examples(query: str = "") -> str:
 
 ---
 
-### 1. 🔍 Get Current Stock for Each SKU by Distributor
+ 1. 🔍 Get Current Stock for Each SKU by Distributor
 
-
+###
 SELECT
     distributor_code,
     sku_code,
@@ -128,9 +128,11 @@ SELECT
     MAX(closing_stock_date) AS latest_stock_date
 FROM distributor_closing_stock
 GROUP BY distributor_code, sku_code, sku_name;
+###
 
 2. 🧾 List Top 10 Orders by Value (after discount)
 
+###
 SELECT
     order_number,
     retailer_code,
@@ -141,10 +143,11 @@ SELECT
 FROM retailer_order_summary
 ORDER BY total_amount DESC
 LIMIT 10;
-
+###
 
 3. 📦 Order Details for a Specific Retailer
 
+###
 SELECT
     ros.order_number,
     ropd.sku_name,
@@ -155,10 +158,11 @@ FROM retailer_order_summary ros
 JOIN retailer_order_product_details ropd
     ON ros.order_number = ropd.order_number
 WHERE ros.retailer_code = 'rt12345';
-
+###
 
 4. 💰 Product MRP vs Price to Retailer
 
+###
 SELECT
     sku_code,
     sku_name,
@@ -167,9 +171,11 @@ SELECT
     (mrp - price_to_retailer)*100/price_to_retailer AS margin
 FROM product_master
 WHERE active = 'Yes';
+###
 
 5. 🎯 Active Schemes Running Today
 
+###
 SELECT
     scheme_name,
     sku_code,
@@ -180,9 +186,10 @@ SELECT
 FROM scheme_details
 WHERE is_active = 'Yes'
   AND CURRENT_TIMESTAMP BETWEEN start_date_time AND end_date_time;
+###
 
-6. 🗺️ Retailer & Distributor Info in a Region
-
+6. Retailer & Distributor Info in a Region
+###
 SELECT
     rm.retailer_name,
     rm.distributor_name,
@@ -191,4 +198,5 @@ SELECT
     rm.distributor_city
 FROM retailer_master rm
 WHERE rm.region_name = 'East';
+###
 """

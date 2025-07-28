@@ -14,8 +14,8 @@ csv_table_map = {
     'retailer_order_summary.csv': 'retailer_order_summary',
     'retailer_master.csv': 'retailer_master',
     'product_master.csv': 'product_master',
-    'Distributor_Closing_Stock.csv':'Distributor_Closing_Stock',
-    'Scheme_Details.csv':'Scheme_Details'
+    'distributor_closing_stock.csv':'distributor_closing_stock',
+    'scheme_details.csv':'scheme_details'
 
 }
 
