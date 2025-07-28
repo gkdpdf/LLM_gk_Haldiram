@@ -1,0 +1,5 @@
+﻿Scheme name,Discount_Percent,is_active,scheme_type,apply_type,SKU_Code,start_date_time,end_date_time,scheme_group_id,Level_1,Level_2
+Eno Discount,10,Y,Flat,Auto,ENO001,01/06/24 8:00,30/06/24 23:59,SG123,Segment,Brand
+Crocin Summer,15,Y,Bulk,Manual,CROCIN500,01/06/24 8:00,20/06/24 23:59,SG124,Category,Brand
+Centrum Offer,12,Y,Flat,Auto,CENTRUMF,07/06/24 9:00,21/06/24 17:00,SG125,Segment,SKU
+Sensodyne Save,7,N,Flat,Auto,SENSODYNEF,02/06/24 10:00,11/06/24 23:59,SG126,Brand,SKU

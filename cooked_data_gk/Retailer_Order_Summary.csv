@@ -1,0 +1,4 @@
+﻿Retailer_code,order_number,shipping_details,City_Code,subtotal,total_discount,shipping_charge,total_amount,Order_Status,created_at,updated_at
+RTL001,ORD1001,"12 MG Road, Mumbai",MUM001,600,30,20,590,1,10/06/24 10:01,10/06/24 10:12
+RTL002,ORD1002,"210 Park Street, Kolkata",KOL002,800,70,20,750,2,09/06/24 15:14,09/06/24 15:20
+RTL003,ORD1003,"15 Brigade Rd, Bangalore",BLR003,1520,100,0,1420,3,08/06/24 14:15,08/06/24 17:25

@@ -1,0 +1,5 @@
+﻿Segment_Code,Segment_Name_Category,Brand_Code,Brand_Name,Parent_Code,Parent_Name,SKU_Code,SKU_Name,SKU_Short_Description,MRP,Active,Price_to_retailer
+SEG01,Antacid,B_ENO,ENO,PR_ENO,ENO Sachet,ENO001,ENO Lemon,Antacid sachet ENO Lemon,32,Y,25
+SEG02,Paracetamol,B_CROCIN,Crocin,PR_CROCIN,Crocin Strip,CROCIN500,Crocin 500 mg,Tablet Pack 500mg,55,Y,50
+SEG03,MultiVitamin,B_CENTRUM,Centrum,PR_CENTRUM,Centrum Adult,CENTRUMF,Centrum Forte,Adult Multivitamin,89,Y,76
+SEG04,Toothpaste,B_SENS,Sensodyne,PR_SENS,Sensitivity Toothpaste,SENSODYNEF,Sensodyne Fresh,Sensitivity Toothpaste,88,Y,70

@@ -5,4 +5,5 @@ older_codes/.env
 .env
 venv
 .ipynb_checkpoints/
-
+llmgk
+check.py 
