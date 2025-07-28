@@ -1,229 +1,194 @@
-# tbl_col_info.py
-
 def table_info_and_examples(query: str = "") -> str:
     """
     Returns full schema and example SQL queries for a LangChain SQL agent.
     """
     return """
 📊 **DATABASE SCHEMA & EXAMPLES**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 🗃️ **TABLE STRUCTURES**
+
+---
+
+### **1. distributor_closing_stock**
+| Column Name              | Data Type | Description                                 |
+|--------------------------|-----------|---------------------------------------------|
+| sku_code                 | STRING    | Unique identifier for the product (SKU)     |
+| sku_name                 | STRING    | Name of the product (SKU)                   |
+| sku_short_description    | STRING    | Short name or description of the product    |
+| brand_name               | STRING    | Name of the product brand                   |
+| brand_code               | STRING    | Code representing the brand                 |
+| distributor_code         | STRING    | Code for the distributor                    |
+| quantity                 | FLOAT     | Quantity of product present with distributor|
+| closing_stock_date       | DATETIME  | Date when stock count was recorded          |
+
+---
+
+### **2. retailer_order_summary**
+| Column Name      | Data Type | Description                          |
+|------------------|-----------|--------------------------------------|
+| retailer_code    | STRING    | Code representing a retailer         |
+| order_number     | STRING    | Unique number assigned to an order   |
+| shipping_details | STRING    | Information related to delivery      |
+| city_code        | STRING    | Code or name of the city             |
+| subtotal         | FLOAT     | Partial total before discounts       |
+| total_discount   | FLOAT     | Total discount on the order          |
+| shipping_charge  | FLOAT     | Shipping charges on the order        |
+| total_amount     | FLOAT     | Total amount after all charges       |
+| order_status     | INT       | Status of the order                  |
+| created_at       | DATETIME  | Date and time when order was created |
+| updated_at       | DATETIME  | Date and time when order was updated |
+
+---
+
+### **3. retailer_order_product_details**
+| Column Name       | Data Type | Description                                |
+|-------------------|-----------|--------------------------------------------|
+| order_number      | INT       | Unique number assigned to an order         |
+| sku_code          | INT       | Unique identifier for the product (SKU)    |
+| sku_name          | STRING    | Name of the product (SKU)                  |
+| order_quantity    | FLOAT     | Item quantity ordered by retailer          |
+| price             | FLOAT     | Price of a single unit                     |
+| subtotal          | FLOAT     | Partial total before discounts and charges |
+| created_at        | DATETIME  | Date and time when record was created      |
+
+---
+
+### **4. product_master**
+| Column Name              | Data Type | Description                                  |
+|--------------------------|-----------|----------------------------------------------|
+| segment_code             | STRING    | Code representing product category           |
+| segment_name_category    | STRING    | Category or classification name              |
+| brand_code               | STRING    | Code representing the brand                  |
+| brand_name               | STRING    | Name of the product brand                    |
+| parent_code              | STRING    | Code for the parent product                  |
+| parent_name              | STRING    | Name of the parent product                   |
+| sku_code                 | STRING    | Unique identifier for the product (SKU)      |
+| sku_name                 | STRING    | Name of the product (SKU)                    |
+| sku_short_description    | STRING    | Short description of the product             |
+| mrp                      | FLOAT     | Maximum retail price of the product          |
+| active                   | STRING    | Product active status                        |
+| price_to_retailer        | FLOAT     | Price at which retailer buys the product     |
+
+---
+
+### **5. retailer_master**
+| Column Name              | Data Type | Description                                  |
+|--------------------------|-----------|----------------------------------------------|
+| region_code              | STRING    | Geographical region code                     |
+| region_name              | STRING    | Geographical region name                     |
+| rsm_code                 | STRING    | Regional Sales Manager code                  |
+| rsm_area                 | STRING    | Regional Sales Manager name                  |
+| so                       | STRING    | Sales Officer code                           |
+| distributor_code         | STRING    | Code for the distributor                     |
+| distributor_name         | STRING    | Name of the distributor                      |
+| distributor_channel_type | STRING    | Type of distribution channel                 |
+| distributor_type         | STRING    | Type of distributor                          |
+| distributor_city         | STRING    | City of the distributor                      |
+| distributor_state        | STRING    | State of the distributor                     |
+| retailer_code            | STRING    | Code representing the retailer               |
+| retailer_name            | STRING    | Name of the retailer                         |
+| salesman_code            | STRING    | Sales representative code                    |
+| salesman_name            | STRING    | Sales representative name                    |
+| saleman_role             | STRING    | Role or designation of the salesman          |
+| outlet_type              | STRING    | Type of outlet                               |
+| warehouse_id             | STRING    | ID of the warehouse                          |
+
+---
+
+### **6. scheme_details**
+| Column Name         | Data Type | Description                                   |
+|---------------------|-----------|-----------------------------------------------|
+| scheme_name         | STRING    | Name of the promotional scheme                |
+| discount_percent    | FLOAT     | Discount offered in the scheme                |
+| is_active           | STRING    | Indicates if the scheme is active             |
+| scheme_type         | STRING    | Type of the promotional scheme                |
+| apply_type          | STRING    | How the scheme is applied                     |
+| sku_code            | STRING    | SKU to which the scheme is applied            |
+| start_date_time     | DATETIME  | Start date and time of the scheme             |
+| end_date_time       | DATETIME  | End date and time of the scheme               |
+| scheme_group_id     | STRING    | Identifier for the scheme group               |
+| level_1             | STRING    | Level 1 metadata                              |
+| level_2             | STRING    | Level 2 metadata                              |
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## 🗃️ **TABLE STRUCTURE:**
+## 🧠 **EXAMPLE SQL QUERIES**
 
-### 1. **tbl_scheme** (Discount Schemes)
-- `sku_id`: SKU linked to the scheme
-- `user_id`: Distributor who created the scheme  
-- `is_active`: Boolean flag (1 = active, 0 = inactive)
-- `discount_percent`: Percentage discount (FLOAT)
-- `name`: Scheme name
+---
 
-### 2. **tbl_sales** (Sales Records)
-- `order_id`: ID of the order
-- `skunit_id`: SKU sold
+### 1. 🔍 Get Current Stock for Each SKU by Distributor
 
-### 3. **orders** (Order Details)
-- `user_id`: Retailer ID who placed the order
-- `order_number`: Order identifier
-- `amount`: Order amount/value
-- `created_at`: Order creation datetime
 
-### 4. **order_items** (Order Line Items)
-- `product_id`: Product in the order
-- `order_id`: Related order ID
+SELECT
+    distributor_code,
+    sku_code,
+    sku_name,
+    SUM(quantity) AS total_stock,
+    MAX(closing_stock_date) AS latest_stock_date
+FROM distributor_closing_stock
+GROUP BY distributor_code, sku_code, sku_name;
 
-### 5. **tbl_product_master** (Product Catalog)
-- `SKU_ID`: SKU code (Primary Key)
-- `product_id`: Product code
-- `Brand_Name`: Brand name
-- `MRP`: Maximum Retail Price
+2. 🧾 List Top 10 Orders by Value (after discount)
 
-### 6. **tbl_distributor_details** (Distributor Info)
-- `User_ID`: Distributor ID (Primary Key)
-- `Distributor_Code`: Distributor reference code
+SELECT
+    order_number,
+    retailer_code,
+    total_amount,
+    total_discount,
+    shipping_charge,
+    created_at
+FROM retailer_order_summary
+ORDER BY total_amount DESC
+LIMIT 10;
 
-### 7. **sub_d_orders** (Sub-Distributor Orders)
-- `distributor_id`: Sub-distributor placing the order
-- `order_id`: Order ID
 
-### 8. **sub_d_order_items** (Sub-Distributor Order Items)
-- `product_id`: Product ordered
-- `order_id`: Corresponding order ID
+3. 📦 Order Details for a Specific Retailer
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SELECT
+    ros.order_number,
+    ropd.sku_name,
+    ropd.order_quantity,
+    ropd.price,
+    ropd.subtotal
+FROM retailer_order_summary ros
+JOIN retailer_order_product_details ropd
+    ON ros.order_number = ropd.order_number
+WHERE ros.retailer_code = 'rt12345';
 
-## 📌 **COMMON SQL QUERIES:**
 
-### 🟢 **SCHEME QUERIES:**
-```sql
--- Currently running schemes
-SELECT name FROM tbl_scheme WHERE is_active = 1;
+4. 💰 Product MRP vs Price to Retailer
 
--- Top 5 schemes with highest discount
-SELECT name, discount_percent 
-FROM tbl_scheme 
-ORDER BY discount_percent DESC 
-LIMIT 5;
+SELECT
+    sku_code,
+    sku_name,
+    mrp,
+    price_to_retailer,
+    (mrp - price_to_retailer)*100/price_to_retailer AS margin
+FROM product_master
+WHERE active = 'Yes';
 
--- All schemes for a specific distributor
-SELECT name, discount_percent, is_active
-FROM tbl_scheme 
-WHERE user_id = 'DISTRIBUTOR_ID';
+5. 🎯 Active Schemes Running Today
 
--- Count of active vs inactive schemes
-SELECT is_active, COUNT(*) as scheme_count
-FROM tbl_scheme 
-GROUP BY is_active;
-```
+SELECT
+    scheme_name,
+    sku_code,
+    discount_percent,
+    scheme_type,
+    start_date_time,
+    end_date_time
+FROM scheme_details
+WHERE is_active = 'Yes'
+  AND CURRENT_TIMESTAMP BETWEEN start_date_time AND end_date_time;
 
-### 📦 **ORDER QUERIES:**
-```sql
--- Last order
-SELECT order_number, amount 
-FROM orders 
-ORDER BY created_at DESC 
-LIMIT 1;
+6. 🗺️ Retailer & Distributor Info in a Region
 
--- Last 3 orders
-SELECT order_number, amount, created_at
-FROM orders 
-ORDER BY created_at DESC 
-LIMIT 3;x
-
--- Orders by a specific user
-SELECT order_number, amount, created_at
-FROM orders 
-WHERE user_id = 'USER_ID'
-ORDER BY created_at DESC;
-
--- Total orders count
-SELECT COUNT(DISTINCT order_number) as total_orders 
-FROM orders;
-```
-
-### 💰 **PRICING QUERIES:**
-```sql
--- CRITICAL: For product price queries, ALWAYS search by Brand_Name first!
--- Step 1: Check if it exists as a brand name (case-insensitive)
-SELECT DISTINCT Brand_Name 
-FROM tbl_product_master 
-WHERE LOWER(Brand_Name) LIKE LOWER('%PRODUCT_NAME%');
-
--- Step 2: If found as brand, show all SKUs and prices for that brand
-SELECT SKU_ID, MRP
-FROM tbl_product_master 
-WHERE LOWER(Brand_Name) LIKE LOWER('%BRAND_NAME%');
-
--- Step 3: If not found as brand, check if it's an SKU
-SELECT SKU_ID, MRP 
-FROM tbl_product_master 
-WHERE LOWER(SKU_ID) LIKE LOWER('%SKU_CODE%');
-
--- Step 4: If nothing found, show all available brands for user guidance
-SELECT DISTINCT Brand_Name 
-FROM tbl_product_master 
-ORDER BY Brand_Name;
-
--- Examples:
--- User asks "price of crocin" -> search Brand_Name like '%crocin%' first
--- User asks "price of paracetamol" -> search Brand_Name like '%paracetamol%' first
-
--- Price range for a brand
-SELECT Brand_Name, MIN(MRP) as min_price, MAX(MRP) as max_price
-FROM tbl_product_master 
-WHERE LOWER(Brand_Name) LIKE LOWER('%BRAND_NAME%')
-GROUP BY Brand_Name;
-
--- All products with prices
-SELECT SKU_ID, Brand_Name, MRP
-FROM tbl_product_master 
-ORDER BY MRP DESC;
-```
-
-### 🏷️ **SKU & BRAND QUERIES:**
-```sql
--- All SKUs for a specific brand
-SELECT SKU_ID, MRP
-FROM tbl_product_master 
-WHERE Brand_Name = 'BRAND_NAME';
-
--- All available brands
-SELECT DISTINCT Brand_Name 
-FROM tbl_product_master 
-ORDER BY Brand_Name;
-
--- SKU count per brand
-SELECT Brand_Name, COUNT(*) as sku_count
-FROM tbl_product_master 
-GROUP BY Brand_Name
-ORDER BY sku_count DESC;
-
--- Check if brand exists
-SELECT COUNT(*) 
-FROM tbl_product_master 
-WHERE Brand_Name = 'BRAND_NAME';
-```
-
-### 📊 **SALES ANALYSIS:**
-```sql
--- Product-wise sales count
-SELECT p.SKU_ID, p.Brand_Name, COUNT(*) as sales_count
-FROM tbl_sales s
-JOIN tbl_product_master p ON s.skunit_id = p.SKU_ID
-GROUP BY p.SKU_ID, p.Brand_Name
-ORDER BY sales_count DESC;
-
--- Sales by brand
-SELECT p.Brand_Name, COUNT(*) as total_sales
-FROM tbl_sales s
-JOIN tbl_product_master p ON s.skunit_id = p.SKU_ID
-GROUP BY p.Brand_Name
-ORDER BY total_sales DESC;
-```
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-## ⚠️ **IMPORTANT NOTES:**
-
-1. **CRITICAL FOR PRICE QUERIES**: When user asks "price of X", ALWAYS search Brand_Name first using LIKE with wildcards
-2. **Search Pattern**: Use `LOWER(Brand_Name) LIKE LOWER('%search_term%')` for case-insensitive partial matching
-3. **Fallback Strategy**: Brand_Name first → SKU_ID second → Show available brands if nothing found
-4. **Use proper column names**: `MRP` not `Price`, `SKU_ID` not `sku_id`
-5. **Boolean fields**: `is_active` uses 1 (true) and 0 (false)
-6. **Join relationships**: Use appropriate JOINs when crossing tables
-7. **Case sensitivity**: Always use LOWER() for text comparisons
-8. **Date ordering**: Use `ORDER BY created_at DESC` for recent orders
-
-## 🔍 **VALIDATION PATTERNS:**
-
-**CRITICAL: For any product price query, use this exact sequence:**
-
-```sql
--- Step 1: Always check Brand_Name first (case-insensitive partial match)
-SELECT DISTINCT Brand_Name 
-FROM tbl_product_master 
-WHERE LOWER(Brand_Name) LIKE LOWER('%USER_INPUT%');
-
--- Step 2: If brand found, get all products for that brand
-SELECT SKU_ID, MRP 
-FROM tbl_product_master 
-WHERE LOWER(Brand_Name) LIKE LOWER('%FOUND_BRAND%');
-
--- Step 3: If no brand found, check SKU_ID
-SELECT SKU_ID, MRP 
-FROM tbl_product_master 
-WHERE LOWER(SKU_ID) LIKE LOWER('%USER_INPUT%');
-
--- Step 4: If nothing found, show available brands for guidance
-SELECT DISTINCT Brand_Name 
-FROM tbl_product_master 
-ORDER BY Brand_Name;
-```
-
-**Examples:**
-- "price of crocin" → Search Brand_Name LIKE '%crocin%' first
-- "cost of paracetamol" → Search Brand_Name LIKE '%paracetamol%' first  
-- "mrp of aspirin" → Search Brand_Name LIKE '%aspirin%' first
-
-💡 **Tip**: Always use appropriate LIMIT clauses and ORDER BY for better performance and user experience.
+SELECT
+    rm.retailer_name,
+    rm.distributor_name,
+    rm.region_name,
+    rm.distributor_state,
+    rm.distributor_city
+FROM retailer_master rm
+WHERE rm.region_name = 'East';
 """

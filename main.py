@@ -10,11 +10,14 @@ from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 from table_relationships import describe_table_relationships
 from tbl_col_info import table_info_and_examples
+from calculator import calculator_tool
+from sql_tool import clean_sql_query
+from today import get_today_date
 import os
 import pandas as pd
 import re
 import requests
-
+from user_query import rewrite_user_query
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from urllib.parse import parse_qs
@@ -68,6 +71,7 @@ if not api_key:
     
 # Setup the LLM
 # llm = ChatGroq(groq_api_key=api_key, model_name="Llama3-8b-8192", streaming=True)
+
 llm = ChatOpenAI(
     model="gpt-4o",
     temperature=0,
@@ -107,74 +111,141 @@ info_example_tool = Tool(
     description="Use this tool to understand available tables and columns see example queries.",
 )
 
-toolkit = SQLDatabaseToolkit(db=db, llm=llm)
-tools = toolkit.get_tools() + [relationship_tool, info_example_tool]
+# Register the tool
+query_rewriter_tool = Tool(
+    name="UserQueryRewriter",
+    func=rewrite_user_query,
+    description="""
+Rewrites unclear, vague, or casual user queries into specific retail-related data questions 
+that fit the SQLite retail database schema (products, MRP, orders, discounts, schemes, sales, retailers, etc.).
 
+Use this tool first when:
+- The user query is ambiguous or casual (e.g. 'how’s the business?', 'top products?', 'anything on crocin?')
+- The user hasn’t mentioned specific columns or table names, but you still need to create a query.
+
+The output should be a **clear rewritten query** suitable for generating SQL.
+Do NOT return SQL from this tool — only return the rewritten data question.
+"""
+)
+
+current_date_tool = Tool(
+    name="CurrentDateProvider",
+    func=get_today_date,
+    description="""
+Returns today's date in YYYY-MM-DD format.
+
+Use this when the user asks about:
+- Sales/orders "today"
+- Discounts/schemes active "today"
+- Anything filtered to the current date
+
+Always call this before generating SQL if the query depends on "today".
+"""
+)
+
+
+calculator = Tool(
+    name="calculator",
+    func=calculator_tool,
+    description="Use this tool to perform basic math like 5+3, 10/2, 4*6, 12-4,percentage. Input should be a valid arithmetic expression."
+)
+
+sql_cleanup_tool = Tool(
+    name="clean_sql_query",
+    func=clean_sql_query,
+    description="Cleans SQL input by removing markdown formatting like ```sql ... ```. Use before passing to the SQL executor if needed."
+)
+
+toolkit = SQLDatabaseToolkit(db=db, llm=llm)
+tools = toolkit.get_tools() + [relationship_tool, info_example_tool,query_rewriter_tool,current_date_tool,calculator,sql_cleanup_tool]
 agent = initialize_agent(
     tools=tools,
     llm=llm,
     agent_type=AgentType.OPENAI_FUNCTIONS,
-    # verbose=True,
+    verbose=True,
     handle_parsing_errors=True,
     agent_kwargs={
         "system_message": """
-You are an expert SQL assistant helping query a SQLite-based retail database which gives one line answer.
+You are an expert SQL assistant helping query a SQLite-based retail database.
+Your users are non-technical (e.g., retailers, sales reps).
 
-✅ Instructions:
-1. If table info is missing, always use `TableInfoAndExamples` first and then check for 
-'TableRelationships' for the relationships between tables.
+🧠 Behavior Instructions:
+1. If the user question is vague, casual, or not specific enough, first use the tool `UserQueryRewriter` to rewrite it.
+2. Then follow this strict response format:
+   - Action: <Tool name or Final Answer>
+   - Action Input: <tool input or SQL query>
 
-2. Use this response format:
-   - Action: <tool-name or Final Answer>
-   - Action Input: <input>
-3. Execute real SQL queries after table identification.
-4. Only show SELECT query results, not intermediate thoughts or tools.
-5. When asked about "top discount schemes", use:
-SELECT name, discount_percent FROM tbl_scheme WHERE is_active = 1 ORDER BY discount_percent DESC;
 
-6. When asked about MRP of the brands, check in the tbl_product_master
-7. When asked about products with have top discounts then use 'TableRelationships' for joining and fetch products.
+🧠 Behavior Guidelines:
+
+4. Always make sure the SQL is syntactically correct for SQLite.
+5. Use table and column names exactly as they exist in the database.
+6. Show only SELECT queries unless asked otherwise.
+7. Use LIMIT 5 by default unless user asks for more.
+8. When answering questions like "what's the margin of X", return SKU_Name and computed margin (MRP - Price).
+9. Keep answers short, retailer-friendly, and non-technical.
+
+💡 Examples:
+
+Q: What is the MRP of Crocin?
+- Action: Final Answer
+- Action Input: SELECT SKU_Name, MRP FROM product_master WHERE SKU_Name LIKE '%Crocin%' LIMIT 1;
+
+Q: Which product sold the most in Mumbai?
+- Action: Final Answer
+- Action Input: SELECT p.SKU_Name, SUM(d.Order_Quantity) AS Total_Sales FROM retailer_order_product_details d JOIN retailer_order_summary s ON d.order_number = s.order_number JOIN retailer_master r ON s.Retailer_code = r.Retailer_Code JOIN product_master p ON d.SKU_Code = p.SKU_Code WHERE r.Distributor_City = 'Mumbai' GROUP BY p.SKU_Name ORDER BY Total_Sales DESC LIMIT 1;
+
+
+
+1. Do NOT use triple backticks or markdown formatting in SQL queries.
+2. SQL should be plain text only — safe to execute without preprocessing.
+3. Do not include 'sql' or any explanation before or after the query.
+4. Use 'like' or 'lower(column) like lower(?)' for case-insensitive filters.
 """
     }
 )
 
 def llm_reply(text):
-    response = agent.run(text)
-    
     # try:
-    #     sql_match = re.search(r"(SELECT\s.+?;)", response, re.IGNORECASE | re.DOTALL)
-    #     if sql_match:
-    #         query = sql_match.group(1).strip()
-    #         result = db.run(query)
+    response = agent.run(text)
+        # sql_match = re.search(r"(SELECT\s.+?;)", response, re.IGNORECASE | re.DOTALL)
 
-    #         if isinstance(result, list):
-    #             df = pd.DataFrame(result)
-    #             print("Executed SQL Query:")
-    #             print(query)
+        # if not sql_match:
+        #     print("No SQL query found in response.")
+        #     print(response)
+        #     return response
 
-    #             # Clean column names for display
-    #             df.columns = [col.replace("_", " ").title() for col in df.columns]
+        # query = sql_match.group(1).strip()
+        # result = db.run(query)
 
-    #             # Round numeric columns (like discount)
-    #             for col in df.select_dtypes(include=['float']):
-    #                 df[col] = df[col].round(2)
+        # print("Executed SQL Query:")
+        # print(query)
 
-    #             # Format currency columns if MRP exists
-    #             if "Mrp" in df.columns:
-    #                 df["Mrp"] = df["Mrp"].apply(lambda x: f"₹{x:.2f}")
+        # if isinstance(result, list):
+        #     df = pd.DataFrame(result)
 
-    #             # Display DataFrame
-    #             display(df)
+        #     # Format columns
+        #     df.columns = [col.replace("_", " ").title() for col in df.columns]
 
-    #         else:
-    #             print("Query result:")
-    #             print(result)
-    #     else:
-    #         print("No SQL query found in response.")
-    #         print(response)
+        #     # Round numeric values
+        #     for col in df.select_dtypes(include='float'):
+        #         df[col] = df[col].round(2)
+
+        #     # Format MRP column if it exists
+        #     if "Mrp" in df.columns:
+        #         df["Mrp"] = df["Mrp"].apply(lambda x: f"₹{x:.2f}")
+
+        #     display(df)
+        # else:
+        #     print("Query result:")
+        #     print(result)
+
+    return response
+
     # except Exception as e:
     #     print("Error:", e)
-    return response
+    #     return f"Error occurred: {e}"
+
 
 # ✅ Send response to WhatsApp
 def send_whatsapp_message(to_number: str, reply_text: str):

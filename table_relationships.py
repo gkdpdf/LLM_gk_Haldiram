@@ -1,87 +1,88 @@
 # table_relationships.py
-
 def describe_table_relationships(query: str = "") -> str:
-    """Provides comprehensive relationship information between tables based on the schema."""
-    relationships = """
+   """Provides comprehensive relationship information between tables based on the schema."""
+   relationships = """
 🔗 **DATABASE RELATIONSHIPS**
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ## 🗂️ **PRIMARY RELATIONSHIPS:**
 
-### 1. **Scheme-Product Relationship**
-   `tbl_scheme.sku_id` → `tbl_product_master.SKU_ID` (Many-to-One)
-   
-### 2. **Scheme-Distributor Relationship** 
-   `tbl_scheme.user_id` → `tbl_distributor_details.User_ID` (Many-to-One)
-   
-### 3. **Sales-Product Relationship**
-   `tbl_sales.skunit_id` → `tbl_product_master.SKU_ID` (Many-to-One)
-   
-### 4. **Orders-Distributor Relationship**
-   `orders.user_id` → `tbl_distributor_details.User_ID` (Many-to-One)
-   
-### 5. **Order Items-Product Relationship**
-   `order_items.product_id` → `tbl_product_master.product_id` (Many-to-One)
-   `order_items.order_id` → `orders.order_number` (Many-to-One)
-   
-### 6. **Sub-Distributor Relationships**
-   `sub_d_orders.distributor_id` → `tbl_distributor_details.Distributor_Code` (Many-to-One)
-   `sub_d_order_items.product_id` → `tbl_product_master.product_id` (Many-to-One)
-   `sub_d_order_items.order_id` → `sub_d_orders.order_id` (Many-to-One)
+### 1. **Scheme ↔ Product**
+- `scheme_details.sku_code` → `product_master.sku_code` (Many-to-One)
+
+### 2. **Retailer Order ↔ Retailer**
+- `retailer_order_summary.retailer_code` → `retailer_master.retailer_code` (Many-to-One)
+
+### 3. **Retailer Order Product ↔ Product**
+- `retailer_order_product_details.sku_code` → `product_master.sku_code` (Many-to-One)
+
+### 4. **Retailer Order Product ↔ Order Summary**
+- `retailer_order_product_details.order_number` → `retailer_order_summary.order_number` (Many-to-One)
+
+### 5. **Retailer Master ↔ Distributor**
+- `retailer_master.distributor_code` → `distributor_closing_stock.distributor_code` (Many-to-One)
+
+### 6. **Distributor_Closing_Stock ↔ Product**
+- `distributor_closing_stock.sku_code` → `product_master.sku_code` (Many-to-One)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ## 🔧 **COMMON JOIN PATTERNS:**
 
-### **Scheme Analysis:**
-```sql
--- Schemes with product details
-SELECT s.name, s.discount_percent, p.Brand_Name, p.SKU_ID
-FROM tbl_scheme s
-JOIN tbl_product_master p ON s.sku_id = p.SKU_ID
-WHERE s.is_active = 1;
-```
+### 🎯 **Active Schemes with Product Info**
 
-### **Sales Analysis:**
-```sql
--- Sales with product information
-SELECT s.order_id, p.SKU_ID, p.Brand_Name, p.MRP
-FROM tbl_sales s
-JOIN tbl_product_master p ON s.skunit_id = p.SKU_ID;
-```
+SELECT 
+    s.scheme_name, s.discount_percent, s.scheme_type,
+    p.sku_name, p.brand_name
+FROM scheme_details s
+JOIN product_master p ON s.sku_code = p.sku_code
+WHERE s.is_active = 'Yes';
 
-### **Order Analysis:**
-```sql
--- Orders with product details
-SELECT o.order_number, o.amount, p.SKU_ID, p.Brand_Name
-FROM orders o
-JOIN order_items oi ON o.order_number = oi.order_id
-JOIN tbl_product_master p ON oi.product_id = p.product_id;
-```
 
-### **Distributor Analysis:**
-```sql
--- Distributor schemes
-SELECT d.Distributor_Code, s.name, s.discount_percent
-FROM tbl_distributor_details d
-JOIN tbl_scheme s ON d.User_ID = s.user_id
-WHERE s.is_active = 1;
-```
+🛒 Retailer Orders with Product Details
 
+SELECT 
+    ros.order_number, ros.total_amount, 
+    ropd.sku_name, ropd.order_quantity, ropd.price
+FROM retailer_order_summary ros
+JOIN retailer_order_product_details ropd 
+    ON ros.order_number = ropd.order_number;
+
+
+🧾 Retailer and Distributor Mapping
+ 
+SELECT 
+    rm.retailer_name, rm.retailer_code,
+    rm.distributor_name, rm.distributor_code,
+    rm.region_name, rm.distributor_state
+FROM retailer_master rm;
+
+
+📦 Closing Stock with Product Info 
+SELECT 
+    dcs.distributor_code, dcs.sku_code, dcs.quantity, 
+    dcs.closing_stock_date, p.sku_name, p.brand_name
+FROM distributor_closing_stock dcs
+JOIN product_master p ON dcs.sku_code = p.sku_code;
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## ⚠️ **JOIN GUIDELINES:**
+⚠️ JOINING GUIDELINES
+product_master is Central
+Most SKU-level joins happen via sku_code
 
-1. **Product Master is Central**: Most analysis requires joining with `tbl_product_master`
-2. **Key Field Mapping**: 
-   - `SKU_ID` in product_master ↔ `sku_id` in scheme ↔ `skunit_id` in sales
-   - `product_id` in product_master ↔ `product_id` in order_items
-3. **Use Appropriate JOIN Types**: 
-   - INNER JOIN for required relationships
-   - LEFT JOIN when you want to keep all records from left table
-4. **Performance**: Always include WHERE clauses to limit results when possible
+Key Field Mapping
+sku_code: shared across product, scheme, order_product, closing_stock
+order_number: shared across order_summary & order_product tables
+retailer_code: used in order_summary ↔ retailer_master
 
-💡 **Remember**: Use JOINs only when you need data from multiple tables. For single-table queries, avoid unnecessary JOINs.
+Use JOIN Types Wisely
+INNER JOIN: to match only valid records
+LEFT JOIN: when all records from left table are needed
+
+Performance Tip
+Add WHERE filters on dates, status, region, etc., to keep queries efficient
+
+💡 Best Practice: Only join when multiple tables are needed — avoid unnecessary joins for single-table queries.
+
 """
-    return relationships
+   return relationships

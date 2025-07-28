@@ -1,4 +1,4 @@
-﻿order_number,SKU_Code,SKU_Name,Order_Quantity,price,subtotal,created_at
+﻿order_number,sku_code,sku_name,order_quantity,price,subtotal,created_at
 ORD1001,ENO001,ENO Lemon,10,25,250,10/06/24 10:03
 ORD1001,SENSODYNEF,Sensodyne Fresh,5,70,350,10/06/24 10:03
 ORD1002,CROCIN500,Crocin 500 mg,8,50,400,09/06/24 15:16
