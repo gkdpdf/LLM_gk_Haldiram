@@ -18,10 +18,35 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 
-def configure_db():
-    # ✅ Create MySQL engine using pymysql
-    mysql_engine = create_engine(
-        "mysql+pymysql://root:Iameighteeni%4018@127.0.0.1:3306/txt2sql"
+# def configure_db():
+#     # ✅ Create MySQL engine using pymysql
+#     mysql_engine = create_engine(
+#         "mysql+pymysql://root:Iameighteeni%4018@127.0.0.1:3306/txt2sql"
+#     )
+
+#     csv_folder = Path.cwd() / "cooked_data_gk"
+#     for csv_file in glob.glob(str(csv_folder / "*.csv")):
+#         table_name = Path(csv_file).stem.lower()
+#         df = pd.read_csv(csv_file)
+
+#         # ✅ Save each CSV as table in MySQL
+#         df.to_sql(name=table_name, con=mysql_engine, index=False, if_exists="replace")
+#         print(f"✅ Loaded table: {table_name}")
+
+#     # ✅ Return LangChain-compatible MySQL connection using pymysql
+#     return mysql_engine,SQLDatabase.from_uri(
+#         "mysql+pymysql://root:Iameighteeni%4018@127.0.0.1:3306/txt2sql"
+#     )
+
+# # 🔌 Connect to DB and print tables
+# mysql_engine, db = configure_db()
+# print("📄 Tables Loaded:", db.get_table_names())
+
+
+def configure_db_postgres():
+    # ✅ Create PostgreSQL engine using psycopg2
+    pg_engine = create_engine(
+        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_new"
     )
 
     csv_folder = Path.cwd() / "cooked_data_gk"
@@ -29,18 +54,20 @@ def configure_db():
         table_name = Path(csv_file).stem.lower()
         df = pd.read_csv(csv_file)
 
-        # ✅ Save each CSV as table in MySQL
-        df.to_sql(name=table_name, con=mysql_engine, index=False, if_exists="replace")
+        # ✅ Save each CSV as table in PostgreSQL
+        df.to_sql(name=table_name, con=pg_engine, index=False, if_exists="replace")
         print(f"✅ Loaded table: {table_name}")
 
-    # ✅ Return LangChain-compatible MySQL connection using pymysql
-    return mysql_engine,SQLDatabase.from_uri(
-        "mysql+pymysql://root:Iameighteeni%4018@127.0.0.1:3306/txt2sql"
+    # ✅ Return LangChain-compatible PostgreSQL connection
+    return pg_engine, SQLDatabase.from_uri(
+        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_new"
     )
 
 # 🔌 Connect to DB and print tables
-mysql_engine, db = configure_db()
+pg_engine, db = configure_db_postgres()
 print("📄 Tables Loaded:", db.get_table_names())
+
+
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
