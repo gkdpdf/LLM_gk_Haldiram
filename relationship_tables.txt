@@ -1,0 +1,25 @@
+
+ **DATABASE RELATIONSHIPS**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 🗂️ **PRIMARY RELATIONSHIPS:**
+
+### 1. **Scheme ↔ Product**
+- `scheme_details.sku_code` → `product_master.sku_code` (Many-to-One)
+
+### 2. **Retailer Order ↔ Retailer**
+- `retailer_order_summary.retailer_code` → `retailer_master.retailer_code` (Many-to-One)
+
+### 3. **Retailer Order Product ↔ Product**
+- `retailer_order_product_details.sku_code` → `product_master.sku_code` (Many-to-One)
+
+### 4. **Retailer Order Product ↔ Order Summary**
+- `retailer_order_product_details.order_number` → `retailer_order_summary.order_number` (Many-to-One)
+
+### 5. **Retailer Master ↔ Distributor**
+- `retailer_master.distributor_code` → `distributor_closing_stock.distributor_code` (Many-to-One)
+
+### 6. **Distributor_Closing_Stock ↔ Product**
+- `distributor_closing_stock.sku_code` → `product_master.sku_code` (Many-to-One)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

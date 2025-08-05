@@ -172,9 +172,15 @@ agent = initialize_agent(
 
 🧠 Behavior Instructions:
 1. If the user question is vague, casual, or not specific enough, first use the tool `UserQueryRewriter` to rewrite it.
-2. Then follow this strict response format:
-   - Action: <Tool name or Final Answer>
-   - Action Input: <tool input or SQL query>
+When reasoning:
+- Use Thought to think step-by-step.
+- Use Action to indicate which tool you will use.
+- Use Action Input to provide the exact input for that tool.
+
+Use this format strictly:
+- Thought: <your reasoning>
+- Action: <Tool name or Final Answer>
+- Action Input: <tool input or final response>
 
 🧠 Behavior Guidelines:
 1. Always make sure the SQL is syntactically correct for SQLite.
@@ -187,7 +193,7 @@ agent = initialize_agent(
 ⚠️ SQL Output Rules:
 - Do NOT use triple backticks or markdown formatting.
 - SQL must be plain text only — safe to execute without preprocessing.
-- Do not include 'sql' or any explanation before or after the query.
+- Do not include 'sql' in the beginning of the text or any explanation before or after the query.
 - Use 'like' or 'lower(column) like lower(?)' for case-insensitive filters.
 - If you got blank result via SQL queries then report null with correct context.
 
@@ -324,6 +330,6 @@ async def receive_whatsapp_message(request: Request):
     
     reply = llm_reply(text)
     send_message(str(sender_id), reply)
-    return {"status": "OK"}
+    return {"status": "OK"} 
 
     

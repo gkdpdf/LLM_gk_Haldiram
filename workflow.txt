@@ -1,0 +1,1 @@
+User query -> Cleaned query -> SQL Query -> Query execution
