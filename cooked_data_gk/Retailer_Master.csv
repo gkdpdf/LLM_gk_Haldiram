@@ -1,5 +1,0 @@
-﻿region_code,region_name,rsm_code,rsm_area,so,distributor_code,distributor_name,distributor_channel_type,distributor_type,distributor_city,distributor_state,retailer_code,retailer_name,salesman_code,salesman_name,saleman_role,outlet_type,warehouse_id
-RG01,West,SM001,Mumbai Urban,SO001,DIS001,AP Distributors,General Trade,City,Mumbai,Maharashtra,RTL001,Harsha Medicals,SL001,Ravi Kumar,Field,Pharmacy,WH1
-RG02,East,SM002,Kolkata Central,SO002,DIS002,Raj Pharma,Distributor,City,Kolkata,West Bengal,RTL002,Healthwell,SL002,Priya Dutta,Field,Chemist,WH2
-RG03,North,SM003,Delhi North,SO003,DIS003,Delhi Distributors,General Trade,Metro,Delhi,Delhi,RTL003,GoodLife Pharmacy,SL003,Anil Mehra,Territory Manager,Pharmacy,WH3
-RG04,South,SM004,Bangalore Metro,SO004,DIS004,Bangalore Health,Kiosk,Metro,Bangalore,Karnataka,RTL004,CityCare,SL004,Sneha S,Rep,Chemist,WH4

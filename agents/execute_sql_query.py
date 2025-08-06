@@ -46,7 +46,7 @@ load_dotenv(override=True)
 def configure_db_postgres():
     # ✅ Create PostgreSQL engine using psycopg2
     pg_engine = create_engine(
-        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_new"
+        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram"
     )
 
     csv_folder = Path.cwd() / "cooked_data_gk"
@@ -60,7 +60,7 @@ def configure_db_postgres():
 
     # ✅ Return LangChain-compatible PostgreSQL connection
     return pg_engine, SQLDatabase.from_uri(
-        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_new"
+        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram"
     )
 
 # 🔌 Connect to DB and print tables

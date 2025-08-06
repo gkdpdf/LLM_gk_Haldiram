@@ -7,8 +7,8 @@ from sqlalchemy import create_engine
 import sqlite3
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
-from table_relationships import describe_table_relationships
-from tbl_col_info import table_info_and_examples
+# from table_relationships import describe_table_relationships
+# from tbl_col_info import table_info_and_examples
 import os
 import pandas as pd
 import re
@@ -86,7 +86,7 @@ llm = ChatOpenAI(
 def configure_db_postgres():
     # ✅ Create PostgreSQL engine using psycopg2
     pg_engine = create_engine(
-        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_new"
+        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram"
     )
 
     csv_folder = Path.cwd() / "cooked_data_gk"
@@ -100,7 +100,7 @@ def configure_db_postgres():
 
     # ✅ Return LangChain-compatible PostgreSQL connection
     return pg_engine, SQLDatabase.from_uri(
-        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_new"
+        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram"
     )
 
 # 🔌 Connect to DB and print tables
@@ -144,9 +144,10 @@ graph.add_edge('execute_sql_query', END)
 
 workflow = graph.compile()
 
-# initial_state = {"user_query" : "what is the discount or scheme I willl get 10 qts of Eno"}
+initial_state = {"user_query" : "Give me top 5 products with highest primary sales"}
 
-# workflow.invoke(initial_state)
+# print(workflow.invoke(initial_state)['query_result'])
+print(workflow.invoke(initial_state))
 
 def llm_reply(txt):
     initial_state = {"user_query" : txt}
