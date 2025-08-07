@@ -8,7 +8,7 @@ import re
 
 load_dotenv(override=True)
 
-with open ("kb_haldiram.pkl", "rb") as f:
+with open ("kb_haldiram_primary.pkl", "rb") as f:
     total_table_dict = pickle.load(f)
     
 with open("relationship_tables.txt", "r", encoding="utf-8") as f:

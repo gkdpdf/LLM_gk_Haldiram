@@ -38,7 +38,7 @@ from agents.sql_cleaned_query_agent import clean_query_node
 from agents.find_tables import find_tables_node
 from agents.create_sql_query import create_sql_query
 from agents.execute_sql_query import execute_sql_query
-
+from agents.check_entity_node import check_entity_node
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 
@@ -86,7 +86,7 @@ llm = ChatOpenAI(
 def configure_db_postgres():
     # ✅ Create PostgreSQL engine using psycopg2
     pg_engine = create_engine(
-        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram"
+        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram_primary"
     )
 
     csv_folder = Path.cwd() / "cooked_data_gk"
@@ -100,7 +100,7 @@ def configure_db_postgres():
 
     # ✅ Return LangChain-compatible PostgreSQL connection
     return pg_engine, SQLDatabase.from_uri(
-        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram"
+        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram_primary"
     )
 
 # 🔌 Connect to DB and print tables
@@ -130,21 +130,23 @@ class finalstate(TypedDict):
 graph = StateGraph(finalstate)
 
 graph.add_node("clean_query_node", clean_query_node)
+graph.add_node("check_entity_node", check_entity_node)
 graph.add_node("find_tables_node", find_tables_node)
 graph.add_node("create_sql_query", create_sql_query)
 graph.add_node("execute_sql_query", execute_sql_query)
 
 # edges
 graph.add_edge(START, 'clean_query_node')
-graph.add_edge('clean_query_node', 'find_tables_node')
+graph.add_edge('clean_query_node', 'check_entity_node')  
+graph.add_edge('check_entity_node', 'find_tables_node')  
 graph.add_edge('find_tables_node', 'create_sql_query')
 graph.add_edge('create_sql_query', 'execute_sql_query')
-
+graph.add_edge('execute_sql_query', END)
 graph.add_edge('execute_sql_query', END)
 
 workflow = graph.compile()
 
-initial_state = {"user_query" : "Give me top 5 products with highest primary sales"}
+initial_state = {"user_query" : "What is the sales of the VH Trading"}
 
 # print(workflow.invoke(initial_state)['query_result'])
 print(workflow.invoke(initial_state))

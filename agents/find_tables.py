@@ -7,31 +7,23 @@ import json
 load_dotenv(override=True)
 
 # 🔹 Load schema markdown
-with open("annotated_schema_haldiram.md", "r") as f:
+with open("annotated_schema_haldiram_primary.md", "r") as f: 
     schema_markdown = f.read()
 
 # 🔹 Allowed table names
 allowed_tables = {
-    "tbl_closingstockdb",
+    "tbl_distributor_master",
     "tbl_primary",
     "tbl_product_master",
-    "tbl_secondary",
-    "tbl_ss_closingstocksuper",
-    "tbl_ss_db_superstockist",
-    "tbl_ss_delhi_db",
-    "tbl_ss_shipment"
+    "tbl_superstockist_master"
 }
 
 # 🔹 Common alias corrections (add more if needed)
 alias_map = {
     "product_master": "tbl_product_master",
     "primary": "tbl_primary",
-    "secondary": "tbl_secondary",
-    "shipment": "tbl_ss_shipment",
-    "closingstockdb": "tbl_closingstockdb",
-    "ss_closingstocksuper": "tbl_ss_closingstocksuper",
-    "ss_db_superstockist": "tbl_ss_db_superstockist",
-    "ss_delhi_db": "tbl_ss_delhi_db"
+    "distributor_master": "tbl_distributor_master",
+    "superstockist_master": "tbl_superstockist_master"
 }
 
 def fix_aliases(output: list[str]) -> list[str]:

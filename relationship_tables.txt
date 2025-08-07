@@ -7,48 +7,12 @@ RELATIONSHIP_SUMMARY
 
 ### 🗂️ PRIMARY RELATIONSHIPS:
 
-#### 1. tbl_SS_ClosingStockSuper ↔ tbl_SS_DB_Superstockist
-- tbl_SS_ClosingStockSuper.Distributor ERP Id → tbl_SS_DB_Superstockist.Superstockist ERP Id (Many-to-One)
+#### 1. tbl_primary ↔ tbl_superstockist_master
+- tbl_primary.super_stockist_id → tbl_superstockist_master.superstockist_id (Many-to-One)
 
-#### 2. tbl_SS_ClosingStockSuper ↔ tbl_Product_Master
-- tbl_SS_ClosingStockSuper.Product ERP Id → tbl_Product_Master.Product ERP Id (Many-to-One)
+#### 2. tbl_primary ↔ tbl_distributor_master
+- tbl_primary.distributor_id → tbl_distributor_master.distributor_erp_id (Many-to-One)
 
-#### 3. tbl_ClosingStockDB ↔ tbl_SS_Delhi_DB
-- tbl_ClosingStockDB.Distributor ERP Id → tbl_SS_Delhi_DB.Distributor ERP Id (Many-to-One)
-
-#### 4. tbl_ClosingStockDB ↔ tbl_Product_Master
-- tbl_ClosingStockDB.Product ERP Id → tbl_Product_Master.Product ERP Id (Many-to-One)
-
-#### 5. tbl_SS_Delhi_DB ↔ tbl_SS_DB_Superstockist
-- tbl_SS_Delhi_DB.Superstockist Name → tbl_SS_DB_Superstockist.Superstockist Name (Many-to-One)
-
-#### 6. tbl_Primary ↔ Dim_Date
-- tbl_Primary.Bill Date → Dim_Date.Date (Many-to-One)
-
-#### 7. tbl_Primary ↔ tbl_SS_Delhi_DB
-- tbl_Primary.Buyer ERP ID → tbl_SS_Delhi_DB.Distributor ERP Id (Many-to-One)
-
-#### 8. tbl_Primary ↔ tbl_Product_Master
-- tbl_Primary.Product ERP ID → tbl_Product_Master.Product ERP Id (Many-to-One)
-
-#### 9. tbl_Secondary ↔ Dim_Date
-- tbl_Secondary.Bill_Date → Dim_Date.Date (Many-to-One)
-
-#### 10. tbl_Secondary ↔ tbl_Product_Master
-- tbl_Secondary.Product_ERP_ID → tbl_Product_Master.Product ERP Id (Many-to-One)
-
-#### 11. tbl_Secondary ↔ tbl_SS_Delhi_DB
-- tbl_Secondary.Seller_ERP_ID → tbl_SS_Delhi_DB.Distributor ERP Id (Many-to-One)
-
-#### 12. tbl_SS_Shipment ↔ tbl_SS_Delhi_DB
-- tbl_SS_Shipment.Seller_ERP_ID → tbl_SS_Delhi_DB.Distributor ERP Id (Many-to-One)
-
-#### 13. tbl_SS_Shipment ↔ Dim_Date
-- tbl_SS_Shipment.Invoice Date → Dim_Date.Date (Many-to-One)
-
-#### 14. tbl_SS_Shipment ↔ tbl_Product_Master
-- tbl_SS_Shipment.Material → tbl_Product_Master.Product ERP Id (Many-to-One)
-
-#### 15. tbl_SS_Shipment ↔ tbl_SS_DB_Superstockist
-- tbl_SS_Shipment.Sold-to Party → tbl_SS_DB_Superstockist.Superstockist ERP Id (Many-to-One)
+#### 3. tbl_primary ↔ tbl_product_master
+- tbl_primary.product_id → tbl_product_master.product_erp_id (Many-to-One)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
