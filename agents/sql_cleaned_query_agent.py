@@ -5,34 +5,41 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-with open("annotated_schema_haldiram.md", "r") as f:
+# Load schema markdown
+with open("annotated_schema_haldiram_primary.md", "r") as f:
     schema_markdown = f.read()
-    
-#llm
 
-llm = ChatOpenAI(model="gpt-4.1-nano", temperature=0)
+# Setup LLM (you can use gpt-3.5-turbo or gpt-4o if needed)
+llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
+# Create the prompt for query cleaning
 query_clean_prompt = ChatPromptTemplate.from_messages([
     ("system", f"""
-     You are a product manager for a Text to SQL system who takes query from the team and converts the query to be more precise as per the database schema.
-     
-     You will be given a database schema in markdown format and user's natural language query.
-     
-     Your task is to:
-     - Improve the query so that it clearly refrences valid table/column name as per the schema.
-     
-     Make sure to preserve the user's intent while correcting phrasing or structure. The output query should not be an sql query but written in natural language only but a l
-     Schema:
-     {schema_markdown}
-     """),
+You are a product manager for a Text-to-SQL system.
+
+You will be given:
+- A database schema (markdown format)
+- A user's natural language query
+
+Your job is to:
+1. Rewrite the user's query more precisely using correct table/column names from the schema
+2. Preserve the **original intent** of the user
+3. Ensure that the query uses exact column or table names found in the schema when possible
+
+⚠️ Do NOT generate SQL. The output must remain in natural language but schema-aligned.
+
+📚 Schema:
+{schema_markdown}
+"""),
     ("human", "User query: {user_query}")
 ])
 
+# Create the LangChain chain
 chain = query_clean_prompt | llm | StrOutputParser()
 
-def clean_query_node(state:dict) -> dict:
+# Final node
+def clean_query_node(state: dict) -> dict:
     user_query = state["user_query"]
-    cleaned_query = chain.invoke({"user_query" : user_query})
+    cleaned_query = chain.invoke({"user_query": user_query})
     state["cleaned_user_query"] = cleaned_query
     return state
- 

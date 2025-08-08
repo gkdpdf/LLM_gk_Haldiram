@@ -41,7 +41,7 @@
   ["ordered_quantity : Quantity of the product ordered, an integer indicating the number of units. <sample values: 1800>"],
   ["short_close_qty : Quantity of the product that was not fulfilled, an integer indicating the shortfall. <sample values: 0>"],
   ["sales_order_date : Date when the sales order was placed, a date indicating the order date. <sample values: 04/10/25>"],
-  ["bill_date : Date when the invoice was generated, a date indicating the billing date. <sample values: 24/04/25>"],
+  ["bill_date : Date when the invoice was generated, a date indicating the billing date.datatype: date <sample values: 24/04/25>"],
   ["invoiced_total_quantity : Total quantity of the product sold, an integer indicating the invoiced units. <sample values: 1800>"]
 ]]
 ```

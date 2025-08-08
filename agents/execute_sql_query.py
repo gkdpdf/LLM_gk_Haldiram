@@ -72,8 +72,8 @@ print("📄 Tables Loaded:", db.get_table_names())
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 result_summary_prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a helpful assistant that summarizes SQL query results for humans."),
-    ("human", "Here is the SQL query: \n{sql_query}\n\nAnd here are the results:\n{query_result}\n\nPlease summarize them in a human-readable format.")
+    ("system", "You are a helpful assistant that summarizes PostgreSQL query results for humans."),
+    ("human", "Here is the PostgreSQL query: \n{sql_query}\n\nAnd here are the results:\n{query_result}\n\nPlease summarize them in a human-readable format.")
 ])
 
 result_summary_chain = result_summary_prompt | llm | StrOutputParser()
@@ -88,6 +88,7 @@ def execute_sql_query(state: dict) -> dict:
             "query_result": raw_result
         })
         state["query_result"] = summary
+        
     except Exception as e:
         state["query_result"] = f"❌ Error: {e}"
     return state

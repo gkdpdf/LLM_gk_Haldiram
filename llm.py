@@ -32,6 +32,7 @@ import pandas as pd
 from sqlalchemy import create_engine,  text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Integer, Float, String
+from sqlalchemy.types import String, Date, Numeric, Float, Integer, TIMESTAMP
 
 
 from agents.sql_cleaned_query_agent import clean_query_node
@@ -39,6 +40,7 @@ from agents.find_tables import find_tables_node
 from agents.create_sql_query import create_sql_query
 from agents.execute_sql_query import execute_sql_query
 from agents.check_entity_node import check_entity_node
+from agents.get_current_date import get_current_date_node
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 
@@ -83,6 +85,32 @@ llm = ChatOpenAI(
 )
 
 
+
+# Define type overrides per table
+TABLE_COLUMN_TYPES = {
+    "tbl_primary": {
+        "bill_date": Date,
+        "sales_order_date": Date,
+        "invoiced_total_quantity": Numeric,
+        "distributor_id": String,
+        "distributor_name": String
+    },
+    "tbl_orders": {
+        "order_amount": Numeric
+    },
+    "tbl_users": {
+        "signup_time": TIMESTAMP
+    }
+}
+
+# Define columns that need date parsing with their expected format
+DATE_COLUMNS = {
+    "tbl_primary": {
+        "bill_date": "%d/%m/%y",
+        "sales_order_date": "%d/%m/%y"
+    }
+}
+
 def configure_db_postgres():
     # ✅ Create PostgreSQL engine using psycopg2
     pg_engine = create_engine(
@@ -94,15 +122,34 @@ def configure_db_postgres():
         table_name = Path(csv_file).stem.lower()
         df = pd.read_csv(csv_file)
 
-        # ✅ Save each CSV as table in PostgreSQL
-        df.to_sql(name=table_name, con=pg_engine, index=False, if_exists="replace")
-        print(f"✅ Loaded table: {table_name}")
+        # ✅ Parse date columns if defined
+        if table_name in DATE_COLUMNS:
+            for col, fmt in DATE_COLUMNS[table_name].items():
+                if col in df.columns:
+                    try:
+                        df[col] = pd.to_datetime(df[col], format=fmt, errors="coerce").dt.date
+                    except Exception as e:
+                        print(f"❌ Date parsing failed for {table_name}.{col}: {e}")
+
+        # ✅ Apply dtype mapping if available
+        dtype_mapping = TABLE_COLUMN_TYPES.get(table_name, {})
+
+        try:
+            df.to_sql(
+                name=table_name,
+                con=pg_engine,
+                index=False,
+                if_exists="replace",
+                dtype=dtype_mapping
+            )
+            print(f"✅ Loaded table: {table_name}")
+        except Exception as e:
+            print(f"❌ Error loading {table_name}: {e}")
 
     # ✅ Return LangChain-compatible PostgreSQL connection
     return pg_engine, SQLDatabase.from_uri(
         "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram_primary"
     )
-
 # 🔌 Connect to DB and print tables
 pg_engine, db = configure_db_postgres()
 print("📄 Tables Loaded:", db.get_table_names())
@@ -130,8 +177,9 @@ class finalstate(TypedDict):
 graph = StateGraph(finalstate)
 
 graph.add_node("clean_query_node", clean_query_node)
-graph.add_node("check_entity_node", check_entity_node)
+graph.add_node("check_entity_node", check_entity_node)  ## new 
 graph.add_node("find_tables_node", find_tables_node)
+graph.add_node("get_current_date",get_current_date_node)
 graph.add_node("create_sql_query", create_sql_query)
 graph.add_node("execute_sql_query", execute_sql_query)
 
@@ -139,14 +187,15 @@ graph.add_node("execute_sql_query", execute_sql_query)
 graph.add_edge(START, 'clean_query_node')
 graph.add_edge('clean_query_node', 'check_entity_node')  
 graph.add_edge('check_entity_node', 'find_tables_node')  
-graph.add_edge('find_tables_node', 'create_sql_query')
+graph.add_edge('find_tables_node','get_current_date')
+graph.add_edge('get_current_date', 'create_sql_query')
 graph.add_edge('create_sql_query', 'execute_sql_query')
 graph.add_edge('execute_sql_query', END)
-graph.add_edge('execute_sql_query', END)
+
 
 workflow = graph.compile()
 
-initial_state = {"user_query" : "What is the sales of the VH Trading"}
+initial_state = {"user_query" : "Total sales made by bhujia"}
 
 # print(workflow.invoke(initial_state)['query_result'])
 print(workflow.invoke(initial_state))
