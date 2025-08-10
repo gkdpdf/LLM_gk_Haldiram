@@ -1,14 +1,22 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from tools.date_tool import get_current_date
 from dotenv import load_dotenv
 import pickle
 import json
 import re
+from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
 
 load_dotenv(override=True)
 
-with open ("kb_haldiram_primary.pkl", "rb") as f:
+def get_today_str():
+    return date.today().strftime("%Y-%m-%d")  
+
+
+
+with open ("kb_haldiram_primary_azam.pkl", "rb") as f:
     total_table_dict = pickle.load(f)
     
 with open("relationship_tables.txt", "r", encoding="utf-8") as f:
@@ -38,6 +46,8 @@ def create_markdown_from_dict(annotated_dict: dict) -> str:
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
+today = get_today_str()
+
 def create_sql_query(state: dict) -> dict:
     sql_tables = state["tables"]
     user_query = state["cleaned_user_query"]  # corrected this from undefined `user_query`
@@ -55,6 +65,21 @@ Your job is to write a **correct SQL query** using:
 1. The user query.
 2. The schema of the database (with tables, columns, and datatypes).
 3. The relationships between the tables (foreign key joins).
+
+Current date time is : {today}
+
+Hard rules:
+1) Use ONLY table and column names that appear verbatim in the provided schema. Do not invent or abbreviate names. If the user asks for a metric, map it to the exact matching column name from the schema.
+2) For KPI thresholds  FIRST aggregate with GROUP BY, THEN filter using HAVING.
+3) Use COALESCE on numeric aggregates to avoid NULLs.
+4) **Dates in Postgres**:
+   - Today: CURRENT_DATE or now()
+   - Start of current month: date_trunc('month', CURRENT_DATE)
+   - Last month range:
+     bill_date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
+     AND bill_date < date_trunc('month', CURRENT_DATE)
+   - Intervals: INTERVAL '7 days', INTERVAL '1 month'
+   - Convert string to date: TO_DATE(string, 'YYYY-MM-DD')
 
 Return **only** a valid SQL query as text. No markdown, no comments, no explanation.
 

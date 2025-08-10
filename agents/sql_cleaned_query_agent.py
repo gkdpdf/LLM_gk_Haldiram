@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-with open("annotated_schema_haldiram.md", "r") as f:
+with open("annotated_schema_haldiram_primary_azam.md", "r") as f:
     schema_markdown = f.read()
     
 #llm

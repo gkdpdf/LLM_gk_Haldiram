@@ -42,29 +42,20 @@ load_dotenv(override=True)
 # mysql_engine, db = configure_db()
 # print("📄 Tables Loaded:", db.get_table_names())
 
+import urllib.parse 
 
-def configure_db_postgres():
-    # ✅ Create PostgreSQL engine using psycopg2
-    pg_engine = create_engine(
-        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram_primary"
-    )
+# Load engine and knowledge base
+password = urllib.parse.quote_plus("Iameighteeni@18")
 
-    csv_folder = Path.cwd() / "cooked_data_gk"
-    for csv_file in glob.glob(str(csv_folder / "*.csv")):
-        table_name = Path(csv_file).stem.lower()
-        df = pd.read_csv(csv_file)
 
-        # ✅ Save each CSV as table in PostgreSQL
-        df.to_sql(name=table_name, con=pg_engine, index=False, if_exists="replace")
-        print(f"✅ Loaded table: {table_name}")
-
+def return_db_postgres():
     # ✅ Return LangChain-compatible PostgreSQL connection
-    return pg_engine, SQLDatabase.from_uri(
-        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram_primary"
+    return SQLDatabase.from_uri(
+        f"postgresql+psycopg2://postgres:{password}@localhost:5432/LLM_Haldiram_primary"
     )
 
 # 🔌 Connect to DB and print tables
-pg_engine, db = configure_db_postgres()
+db = return_db_postgres()
 print("📄 Tables Loaded:", db.get_table_names())
 
 
@@ -72,8 +63,14 @@ print("📄 Tables Loaded:", db.get_table_names())
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 result_summary_prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a helpful assistant that summarizes SQL query results for humans."),
-    ("human", "Here is the SQL query: \n{sql_query}\n\nAnd here are the results:\n{query_result}\n\nPlease summarize them in a human-readable format.")
+    ("system", 
+     "You are a helpful assistant that summarizes SQL query results for a WhatsApp chatbot. "
+     "Your summaries must be very concise, use plain language, and fit in as little short sentences as possible. "
+     "Avoid technical details or SQL jargon or user query. Focus only on the key insight."
+     "If the query results are empty, clearly say that no relevant data was found and suggest the user try a different or more specific query."),
+    ("human", 
+     "SQL query:\n{sql_query}\n\nResults:\n{query_result}\n\n"
+     "Reply with a short WhatsApp-friendly summary of the results.")
 ])
 
 result_summary_chain = result_summary_prompt | llm | StrOutputParser()

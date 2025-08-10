@@ -1,8 +1,10 @@
 from sqlalchemy import text, create_engine
 import pickle
+import urllib.parse 
 
 # Load engine and knowledge base
-engine = create_engine("postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram_primary")
+password = urllib.parse.quote_plus("Iameighteeni@18")
+engine = create_engine(f"postgresql+psycopg2://postgres:{password}@localhost:5432/LLM_Haldiram_primary")
 dict_knowledge = pickle.load(open("kb_haldiram_primary.pkl", "rb"))
 
 ENTITY_COLUMNS = ["super_stockist_name", "distributor_name", "product_name"]

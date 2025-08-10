@@ -1,33 +1,42 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
+from pydantic import BaseModel, Field, RootModel
+from typing import List, Literal
 from dotenv import load_dotenv
 import json
 
 load_dotenv(override=True)
 
 # 🔹 Load schema markdown
-with open("annotated_schema_haldiram_primary.md", "r") as f: 
+with open("annotated_schema_haldiram_primary_azam.md", "r") as f: 
     schema_markdown = f.read()
 
 # 🔹 Allowed table names
-allowed_tables = {
+AllowedTables = Literal[
     "tbl_distributor_master",
-    "tbl_primary",
-    "tbl_product_master",
-    "tbl_superstockist_master"
-}
+    "tbl_Primary",
+    "tbl_Product_Master",
+    "tbl_superstockist_master",
+]
 
-# 🔹 Common alias corrections (add more if needed)
-alias_map = {
-    "product_master": "tbl_product_master",
-    "primary": "tbl_primary",
-    "distributor_master": "tbl_distributor_master",
-    "superstockist_master": "tbl_superstockist_master"
-}
 
-def fix_aliases(output: list[str]) -> list[str]:
-    return [alias_map.get(t, t) for t in output]
+class TableList(RootModel[List[AllowedTables]]):
+    pass
+
+table_list_parser = PydanticOutputParser(pydantic_object=TableList)
+
+# # 🔹 Common alias corrections (add more if needed)
+# alias_map = {
+#     "product_master": "tbl_product_master",
+#     "primary": "tbl_primary",
+#     "distributor_master": "tbl_distributor_master",
+#     "superstockist_master": "tbl_superstockist_master"
+# }
+
+# def fix_aliases(output: list[str]) -> list[str]:
+#     return [alias_map.get(t, t) for t in output]
 
 # 🔹 LLM setup
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
@@ -46,7 +55,7 @@ Given a user query and a markdown-formatted database schema, return a valid **JS
 ⚠️ Do not include markdown or bullet points.
 ⚠️ Use only exact matches from this list:
 
-{sorted(list(allowed_tables))}
+{AllowedTables}
 
 Schema:
 {schema_markdown}
@@ -55,27 +64,10 @@ Schema:
 ])
 
 # 🔹 Chain with StrOutputParser
-chain = query_clean_prompt | llm | StrOutputParser()
+chain = query_clean_prompt | llm | table_list_parser
 
-# 🔹 Node function
-def find_tables_node(state: dict) -> dict:
+def find_tables_node(state:dict) -> dict:
     user_query = state["cleaned_user_query"]
-    raw_output = chain.invoke({"user_query": user_query})
-
-    try:
-        # Parse JSON safely
-        output_list = json.loads(raw_output)
-    except json.JSONDecodeError:
-        raise ValueError(f"❌ Failed to parse output as JSON list:\n{raw_output}")
-
-    # Normalize via alias map
-    fixed_tables = fix_aliases(output_list)
-
-    # Final validation against allowed tables
-    valid_tables = [tbl for tbl in fixed_tables if tbl in allowed_tables]
-
-    if not valid_tables:
-        raise ValueError(f"❌ No valid tables found in output: {fixed_tables}")
-
-    state["tables"] = valid_tables
+    output = chain.invoke({"user_query" : user_query})
+    state["tables"] = output.root
     return state
