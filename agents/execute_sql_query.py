@@ -79,13 +79,13 @@ def execute_sql_query(state: dict) -> dict:
     sql_query = state["sql_query"]
     try:
         raw_result = db.run(sql_query)
-        # Generate human-readable summary
-        summary = result_summary_chain.invoke({
-            "sql_query": sql_query,
-            "query_result": raw_result
-        })
-        state["query_result"] = summary
+        if len(raw_result) > 0:
+            state["dataframe"] = raw_result
+            state["query_results"] = "Query executed successfully"
+        else:
+            state["is_empty_result"] = True 
     except Exception as e:
-        state["query_result"] = f"❌ Error: {e}"
+        state["query_error_message"] = f"❌ Error: {e}"
+        state["failed_query"] = sql_query
     return state
 
