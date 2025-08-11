@@ -185,17 +185,24 @@ graph.add_node("execute_sql_query", execute_sql_query)
 
 # edges
 graph.add_edge(START, 'clean_query_node')
-graph.add_edge('clean_query_node', 'check_entity_node')  
+
+graph.add_conditional_edges(
+    "clean_query_node",
+    lambda s: END if s.get("final_answer") else "check_entity_node",
+    {END: END, "check_entity_node": "check_entity_node"}
+)
+
+# graph.add_edge('clean_query_node', 'check_entity_node')  
 graph.add_edge('check_entity_node', 'find_tables_node')  
 graph.add_edge('find_tables_node','get_current_date')
 graph.add_edge('get_current_date', 'create_sql_query')
 graph.add_edge('create_sql_query', 'execute_sql_query')
-graph.add_edge('execute_sql_query', END)
+graph.add_edge('execute_sql_query', END) 
 
 
 workflow = graph.compile()
 
-initial_state = {"user_query" : "Total sales made by bhujia"}
+initial_state = {"user_query" : "CNC biscutis ki sales"}
 
 # print(workflow.invoke(initial_state)['query_result'])
 print(workflow.invoke(initial_state))
