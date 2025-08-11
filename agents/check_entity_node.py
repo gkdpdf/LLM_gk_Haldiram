@@ -17,7 +17,6 @@ for table_desc in dict_knowledge.values():
                 col = line.split(":")[0].strip().replace("`", "").replace('"', '')
                 all_schema_columns.add(col.lower())
 
-# Optional: fallback intent mapping
 fallback_column_groups = {
     "sales": ["invoiced_total_quantity", "invoice_value", "sales_value", "volume"],
     "date": ["sales_order_date", "month", "year"],
@@ -26,14 +25,13 @@ fallback_column_groups = {
     "super_stockist": ["super_stockist_name", "super_stockist_id"]
 }
 
-
 def check_entity_node(state):
     user_query = state.get("cleaned_user_query", "").lower()
     identified_entity = None
     matched_value = None
     fallback_intents = []
 
-    # === STEP 1: Try to match actual entity values from DB
+    # STEP 1: Try to match actual entity values from DB
     try:
         for column in ENTITY_COLUMNS:
             query = text(f"SELECT DISTINCT {column} FROM tbl_primary WHERE {column} IS NOT NULL LIMIT 500")
@@ -53,7 +51,7 @@ def check_entity_node(state):
     except Exception as e:
         print(f"❌ Error while matching entity: {e}")
 
-    # === STEP 2: Fallback intent inference from keywords
+    # STEP 2: Fallback intent inference
     if not identified_entity:
         print("ℹ️ No direct entity match found. Trying fallback intent detection...")
         for intent, keywords in fallback_column_groups.items():
@@ -61,12 +59,8 @@ def check_entity_node(state):
                 if keyword.lower() in user_query:
                     fallback_intents.append(intent)
                     print(f"🧠 Fallback intent matched: '{intent}' via keyword '{keyword}'")
-                    break  # avoid adding multiple for same intent
+                    break
 
-        if not fallback_intents:
-            print("⚠️ No fallback intents identified either.")
-
-    # === Final summary
     if identified_entity:
         print(f"🔍 Final identified entity: {identified_entity}")
         print(f"🔍 Matched value from user query: {matched_value}")
@@ -75,9 +69,7 @@ def check_entity_node(state):
     else:
         print("⚠️ No match (entity or intent) found.")
 
-    # === Save to state
     state["identified_entity"] = identified_entity
     state["matched_entity_value"] = matched_value
     state["fallback_intents"] = fallback_intents if not identified_entity else None
-
     return state
