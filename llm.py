@@ -219,5 +219,5 @@ async def receive_whatsapp_message(request: Request):
     return {"status": "OK", "message": reply}
 
 if __name__ == "__main__":
-    demo = {"user_query": "sales of takatak in last 2 months"}
+    demo = {"user_query": "Bhujia 100 gm sales "}
     print(workflow.invoke(demo))
