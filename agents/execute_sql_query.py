@@ -79,13 +79,11 @@ def execute_sql_query(state: dict) -> dict:
     sql_query = state["sql_query"]
     try:
         raw_result = db.run(sql_query)
-        if len(raw_result) > 0:
-            state["dataframe"] = raw_result
-            state["query_results"] = "Query executed successfully"
-        else:
-            state["is_empty_result"] = True 
+        state["dataframe"] = raw_result
+        state["query_results"] = "Query executed successfully"
     except Exception as e:
-        state["query_error_message"] = f"❌ Error: {e}"
-        state["failed_query"] = sql_query
+        state["query_results"] = "Query execution failed"
+        state["query_error_message"] = [f"❌ Error: {e}"]
+        state["failed_query"] = [sql_query]
     return state
 
