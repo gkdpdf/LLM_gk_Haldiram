@@ -1,15 +1,14 @@
 from pathlib import Path
 import os
 import glob
-import json
-from typing import TypedDict
+from typing import TypedDict, Any
 from dotenv import load_dotenv
 
 import pandas as pd
-from sqlalchemy import create_engine, text
-from sqlalchemy.types import Date, Numeric, String, Float, Integer, TIMESTAMP
+from sqlalchemy import create_engine
+from sqlalchemy.types import Date, Numeric, String, Integer, TIMESTAMP
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from twilio.rest import Client
@@ -54,7 +53,7 @@ llm = ChatOpenAI(
 )
 
 # -----------------------------------------------------------------------------
-# DB bootstrap: load CSVs into Postgres (optional if DB already has tables)
+# DB bootstrap (comment out if DB already has the tables)
 # -----------------------------------------------------------------------------
 TABLE_COLUMN_TYPES = {
     "tbl_primary": {
@@ -65,13 +64,28 @@ TABLE_COLUMN_TYPES = {
         "distributor_name": String
     },
     "tbl_orders": {"order_amount": Numeric},
-    "tbl_users": {"signup_time": TIMESTAMP}
+    "tbl_users": {"signup_time": TIMESTAMP},
+    # Optional shipment table (only if you have it)
+    "tbl_shipment": {
+        "invoice_date": Date,
+        "actual_billed_quantity": Numeric,
+        "sold_to_party": Integer,
+        "supplying_plant": String,
+        "sales_district": String,
+        "sold_to_party_name": String,
+        "city": String,
+        "material": String,
+        "material_description": String,
+    },
 }
 
 DATE_COLUMNS = {
     "tbl_primary": {
         "bill_date": "%d/%m/%y",
         "sales_order_date": "%d/%m/%y"
+    },
+    "tbl_shipment": {
+        "invoice_date": "%d/%m/%y"
     }
 }
 
@@ -80,40 +94,41 @@ def configure_db_postgres():
         "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram_primary"
     )
     csv_folder = Path.cwd() / "cooked_data_gk"
-    for csv_file in glob.glob(str(csv_folder / "*.csv")):
-        table_name = Path(csv_file).stem.lower()
-        df = pd.read_csv(csv_file)
+    if csv_folder.exists():
+        for csv_file in glob.glob(str(csv_folder / "*.csv")):
+            table_name = Path(csv_file).stem.lower()
+            df = pd.read_csv(csv_file)
 
-        if table_name in DATE_COLUMNS:
-            for col, fmt in DATE_COLUMNS[table_name].items():
-                if col in df.columns:
-                    try:
-                        df[col] = pd.to_datetime(df[col], format=fmt, errors="coerce").dt.date
-                    except Exception as e:
-                        print(f"❌ Date parsing failed for {table_name}.{col}: {e}")
+            if table_name in DATE_COLUMNS:
+                for col, fmt in DATE_COLUMNS[table_name].items():
+                    if col in df.columns:
+                        try:
+                            df[col] = pd.to_datetime(df[col], format=fmt, errors="coerce").dt.date
+                        except Exception as e:
+                            print(f"❌ Date parsing failed for {table_name}.{col}: {e}")
 
-        dtype_mapping = TABLE_COLUMN_TYPES.get(table_name, {})
-        try:
-            df.to_sql(
-                name=table_name,
-                con=pg_engine,
-                index=False,
-                if_exists="replace",
-                dtype=dtype_mapping
-            )
-            print(f"✅ Loaded table: {table_name}")
-        except Exception as e:
-            print(f"❌ Error loading {table_name}: {e}")
+            dtype_mapping = TABLE_COLUMN_TYPES.get(table_name, {})
+            try:
+                df.to_sql(
+                    name=table_name,
+                    con=pg_engine,
+                    index=False,
+                    if_exists="replace",
+                    dtype=dtype_mapping
+                )
+                print(f"✅ Loaded table: {table_name}")
+            except Exception as e:
+                print(f"❌ Error loading {table_name}: {e}")
 
     return pg_engine
 
-pg_engine = configure_db_postgres()
+engine = configure_db_postgres()
 print("✅ DB ready.")
 
 # -----------------------------------------------------------------------------
 # State & Workflow
 # -----------------------------------------------------------------------------
-class FinalState(TypedDict):
+class FinalState(TypedDict, total=False):
     user_query: str
     cleaned_user_query: str
     tables: list[str]
@@ -123,13 +138,22 @@ class FinalState(TypedDict):
     error_message: str
     rows: list
     columns: list
-    identified_entity: str
-    matched_entity_value: str
+    identified_entity: str | None
+    matched_entity_value: str | None
     confidence: float
     method: str
     fallback_intents: list
     retry_count: int
     final_answer: bool
+    awaiting_route_choice: bool
+    route_preference: str
+    session_id: str
+    # plumbing
+    measure_override: str
+    date_override: str
+    months_override: int
+    # pass engine
+    engine: Any
 
 MAX_RETRIES = 2
 
@@ -144,8 +168,8 @@ def _exec_router(s: dict):
 
 graph = StateGraph(FinalState)
 graph.add_node("clean_query_node", clean_query_node)
-graph.add_node("check_entity_node", check_entity_node)
-graph.add_node("find_tables_node", find_tables_node)          # << added
+graph.add_node("check_entity_node", lambda state: check_entity_node(state, engine))
+graph.add_node("find_tables_node", find_tables_node)
 graph.add_node("create_sql_query", create_sql_query)
 graph.add_node("execute_sql_query", execute_sql_query)
 graph.add_node("rewrite_sql_query", rewrite_sql_query)
@@ -157,9 +181,8 @@ graph.add_conditional_edges(
     lambda s: "summarize_results" if s.get("final_answer") else "check_entity_node",
     {"summarize_results": "summarize_results", "check_entity_node": "check_entity_node"}
 )
-
-graph.add_edge("check_entity_node", "find_tables_node")       # << changed
-graph.add_edge("find_tables_node", "create_sql_query")        # << added
+graph.add_edge("check_entity_node", "find_tables_node")
+graph.add_edge("find_tables_node", "create_sql_query")
 graph.add_edge("create_sql_query", "execute_sql_query")
 graph.add_conditional_edges("execute_sql_query", _exec_router,
     {"summarize_results": "summarize_results", "rewrite_sql_query": "rewrite_sql_query"}
@@ -169,28 +192,18 @@ graph.add_edge("summarize_results", END)
 
 workflow = graph.compile()
 
-def llm_reply(txt: str) -> dict:
+def llm_reply(txt: str, *, session_id: str | None = None, route_pref: str | None = None) -> dict:
     initial_state: FinalState = {
         "user_query": txt,
-        "cleaned_user_query": "",
-        "tables": [],  # let find_tables_node supply this
-        "sql_query": "",
-        "query_result": "",
-        "exec_success": False,
-        "error_message": "",
-        "rows": [],
-        "columns": [],
-        "identified_entity": "",
-        "matched_entity_value": "",
-        "confidence": 0.0,
-        "method": "",
-        "fallback_intents": [],
-        "retry_count": 0,
-        "final_answer": False,
+        "engine": engine,
     }
-    result = workflow.invoke(initial_state)
-    return result
+    if session_id:
+        initial_state["session_id"] = session_id
+    if route_pref:
+        initial_state["route_preference"] = route_pref
+    return workflow.invoke(initial_state)
 
+# ------------- Twilio webhook (optional) -----------------
 def send_message(to_number, body_text):
     try:
         message = client.messages.create(
@@ -210,14 +223,35 @@ def send_message(to_number, body_text):
 async def receive_whatsapp_message(request: Request):
     form = await request.form()
     sender_id = str(form.get("From"))
-    text_msg = form.get("Body")
+    text_msg = (form.get("Body") or "").strip()
     print("📩 Received:", sender_id, text_msg)
 
-    reply = llm_reply(text_msg).get('query_result', 'No response.')
+    result = llm_reply(text_msg, session_id=sender_id)
+    reply = result.get('query_result', 'No response.')
     print(reply)
     send_message(str(sender_id), reply)
     return {"status": "OK", "message": reply}
 
+# ------------- Local terminal runner -----------------
 if __name__ == "__main__":
-    demo = {"user_query": "Bhujia 100 gm sales "}
-    print(workflow.invoke(demo))
+    print("Type a query. If I ask 'primary or shipment?', just reply with one of them.")
+    pending = None  
+
+    while True:
+        user_input = input("You: ").strip()
+        if not user_input:
+            continue
+
+        # Follow-up choice flow
+        if pending and user_input.lower() in ("primary", "shipment"):
+            result = llm_reply(pending, route_pref=user_input.lower())
+            #print(workflow.invoke(initial_state))
+            print("Bot:", result.get("query_result") or "No response.")
+            pending = None
+            continue
+
+        # Normal flow
+        result = llm_reply(user_input)
+        print("Bot:", result.get("query_result") or "No response.")
+        if result.get("awaiting_route_choice"):
+            pending = user_input

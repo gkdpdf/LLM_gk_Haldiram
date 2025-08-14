@@ -77,4 +77,23 @@
     ["temp_created_date : Temporary date of record creation, represented as a date in DD/MM/YY format. <sample values: 30/03/25, ...>"]
 ]
 ]
+
+
+
+### **tbl_shipment**
+```json
+["This table records shipment transactions from supplying plants to customers (sold-to parties), detailing the logistical and billing aspects of product movement. It serves as a key source for tracking dispatched quantities, billing dates, and the relationship between plants, regions, and customers. The data can be used for supply chain performance monitoring, shipment reconciliation with sales records, and identifying customer-level shipment patterns.", 
+[
+  ["supplying_plant : Code of the plant responsible for supplying the goods, datatype: string, <sample values: HM51>"],
+  ["sales_district : Geographical sales district associated with the shipment, datatype: string, <sample values: NORTH>"],
+  ["sold_to_party : Unique identifier for the customer (buyer) receiving the shipment, datatype: integer, <sample values: 19000102>"],
+  ["sold_to_party_name : Name of the customer (buyer) receiving the shipment, datatype: string, <sample values: S B Markplus Private Limited>"],
+  ["city : City where the customer is located, datatype: string, <sample values: Delhi>"],
+  ["material : Unique identifier for the product being shipped, datatype: string, <sample values: FD062900401000000D>"],
+  ["material_description : Description of the product being shipped, datatype: string, <sample values: Palak Sev MRP 10|40 GM*10 KG>"],
+  ["actual_billed_quantity : The quantity billed to the customer for the shipment, datatype: integer, <sample values: 8750, 1750, 2500>"],
+  ["invoice_date : Date when the shipment was invoiced, datatype: date, <sample values: 07/05/25>"]
+]
+]
+
 ```

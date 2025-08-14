@@ -15,4 +15,14 @@ RELATIONSHIP_SUMMARY
 
 #### 3. tbl_primary ↔ tbl_product_master
 - tbl_primary.product_id → tbl_product_master.product_erp_id (Many-to-One)
+
+### 🗂️ SHIPMENT RELATIONSHIPS:
+
+#### 1. tbl_shipment ↔ tbl_superstockist_master
+- tbl_primary.sold_to_party → tbl_superstockist_master.superstockist_id (Many-to-One)
+
+#### 2. tbl_shipment ↔ tbl_product_master
+- tbl_primary.material → tbl_product_master.product_erp_id (Many-to-One)
+
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
