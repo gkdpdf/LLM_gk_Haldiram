@@ -195,7 +195,7 @@ def _check_entity_wrapper(state):
 def _build_workflow():
     graph = StateGraph(FinalState)
     graph.add_node("clean_query_node", clean_query_node)
-    graph.add_node("check_entity_node", _check_entity_wrapper)
+    graph.add_node("check_entity_node", lambda s, _e=_engine: check_entity_node(s, _e))
     graph.add_node("find_tables_node", find_tables_node)
     graph.add_node("create_sql_query", create_sql_query)
     graph.add_node("execute_sql_query", execute_sql_query)

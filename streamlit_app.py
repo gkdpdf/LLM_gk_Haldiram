@@ -9,7 +9,7 @@ from service import get_engine, llm_reply
 
 # -------------------- Page --------------------
 st.set_page_config(
-    page_title="Primary / Shipment Assistant",
+    page_title="Sales Assistant",
     page_icon="🧭",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -70,7 +70,7 @@ st.markdown("""
 # -------------------- Header --------------------
 st.markdown("""
 <div class="app-header">
-  <h1>Primary / Shipment Assistant</h1>
+  <h1>Sales Assistant</h1>
   <div class="app-subtle">Select domain → chat. That’s it.</div>
 </div>
 """, unsafe_allow_html=True)
