@@ -22,20 +22,15 @@ query_clean_prompt = ChatPromptTemplate.from_messages([
      You will be given:
      -user's natural language query.
      -a database schema in markdown format  
-     -A vector DB knowledge markdown containing possible entity values for some columns.
      
      Your task is to:
      - Improve the query so that it clearly refrences valid table/column name as per the schema.
-     - Find the values from vector_db_markdown that resembles the query and then find the column name from the vector db if value found 
      - there is confusion between super stockist and distributor name check it wisely
-     - Use entity names from the vector DB knowledge **only if** they help make the query unambiguous.
      - Do NOT output SQL.
     - Keep the output in **natural language** while preserving the original intent.
     --- SCHEMA (markdown) ---
     {schema_markdown}
  
-    --- VECTOR DB KNOWLEDGE (markdown) ---
-    {vector_db_markdown}
      """),
     ("human", "User query: {user_query}")
 ])
