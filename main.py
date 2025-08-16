@@ -1,32 +1,48 @@
+from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
+
 from pathlib import Path
 from langchain.agents import initialize_agent, Tool
 from langchain.sql_database import SQLDatabase
 from langchain.agents.agent_types import AgentType
 from langchain.agents.agent_toolkits import SQLDatabaseToolkit
-from sqlalchemy import create_engine
-import sqlite3
-# from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
-from table_relationships import describe_table_relationships
-from tbl_col_info import table_info_and_examples
-from calculator import calculator_tool
-from sql_tool import clean_sql_query
-from today import get_today_date
 import os
 import pandas as pd
 import re
 import requests
-from user_query import rewrite_user_query
+import glob
+from sqlalchemy.types import Date
+
+from langgraph.graph import StateGraph, START, END
+from typing import Dict, Any, TypedDict, Annotated
+import operator
+import pickle
+from IPython.display import Image
+
+from thefuzz import process
+from datetime import datetime
+import json
+import tqdm
+
+
+from sqlalchemy import create_engine,  text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.types import Integer, Float, String
+
+from agents.sql_cleaned_query_agent import clean_query_node
+from agents.find_tables import find_tables_node
+from agents.create_sql_query import create_sql_query
+from agents.execute_sql_query import execute_sql_query
+from agents.rewrite_sql_query import rewrite_sql_query
+from agents.summarise_query_results import summarise_results
+
 from dotenv import load_dotenv
 load_dotenv(override=True)
-from urllib.parse import parse_qs
-from twilio.rest import Client
-from twilio.base.exceptions import TwilioRestException
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+import urllib.parse 
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -72,181 +88,94 @@ if not api_key:
 # Setup the LLM
 # llm = ChatGroq(groq_api_key=api_key, model_name="Llama3-8b-8192", streaming=True)
 
-llm = ChatOpenAI(
-    model="gpt-4o",
-    temperature=0,
-    max_tokens=None,
-    timeout=None,
-    max_retries=2,
-    # api_key="...",  # if you prefer to pass api key in directly instaed of using env vars
-    # base_url="...",
-    # organization="...",
-    # other params...
-)
-
-# Configure and return SQLite database connection
+# Load engine and knowledge base
+password = urllib.parse.quote_plus("Iameighteeni@18")
 def configure_db():
-    import glob
-    conn = sqlite3.connect(":memory:")
+    # ✅ Create MySQL engine using pymysql
+    mysql_engine = create_engine(
+        f"postgresql+psycopg2://postgres:{password}@localhost:5432/LLM_Haldiram_primary"
+    )
+
     csv_folder = Path.cwd() / "cooked_data_gk"
     for csv_file in glob.glob(str(csv_folder / "*.csv")):
         table_name = Path(csv_file).stem.lower()
         df = pd.read_csv(csv_file)
-        df.to_sql(table_name, conn, index=False, if_exists="replace")
-    return SQLDatabase.from_uri("sqlite://", engine_args={"creator": lambda: conn})
 
-# Connect to DB
-db = configure_db()
-# print("📄 Tables Loaded:", db.get_table_names())
+        # ✅ Save each CSV as table in MySQL
+        df.to_sql(name=table_name, con=mysql_engine, index=False, if_exists="replace")
+        print(f"✅ Loaded table: {table_name}")
+        
+                # ✅ Convert bill_date column from text to date
+        if table_name == "tbl_primary":
+            with mysql_engine.connect() as conn:
+                conn.execute(
+                    text("""
+                        ALTER TABLE public.tbl_primary
+                        ALTER COLUMN bill_date TYPE date
+                        USING TO_DATE(bill_date, 'DD/MM/YY')
+                    """)
+                )
+                conn.commit()
+                print("✅ Converted bill_date to DATE type")
 
-# Tools
-relationship_tool = Tool(
-    name="TableRelationships",
-    func=describe_table_relationships,
-    description="Use this tool to understand how tables are related before writing SQL queries."
-)
-info_example_tool = Tool(
-    name="TableInfoAndExamples",
-    func=table_info_and_examples,
-    description="Use this tool to understand available tables and columns see example queries.",
-)
+    # ✅ Return LangChain-compatible MySQL connection using pymysql
+    return mysql_engine,SQLDatabase.from_uri(
+        f"postgresql+psycopg2://postgres:{password}@localhost:5432/LLM_Haldiram_primary"
+    )
 
-# Register the tool
-query_rewriter_tool = Tool(
-    name="UserQueryRewriter",
-    func=rewrite_user_query,
-    description="""
-Rewrites unclear, vague, or casual user queries into specific retail-related data questions 
-that fit the SQLite retail database schema (products, MRP, orders, discounts, schemes, sales, retailers, etc.).
+# 🔌 Connect to DB and print tables
+mysql_engine, db = configure_db()
+print("📄 Tables Loaded:", db.get_table_names())
 
-Use this tool first when:
-- The user query is ambiguous or casual (e.g. 'how’s the business?', 'top products?', 'anything on crocin?')
-- The user hasn’t mentioned specific columns or table names, but you still need to create a query.
+class finalstate(TypedDict):
+    user_query: str
+    cleaned_user_query: str
+    tables: list[str]
+    dataframe : pd.DataFrame
+    failed_query: Annotated[list[str], operator.add] 
+    query_error_message : Annotated[list[str], operator.add]
+    retry_count : int
+    is_empty_result : bool
+    sql_query: str
+    query_results: str
+    summary_results: str
+    
+### Create a node to check wether the query was failed or not
+def check_query_failed(state: finalstate) -> finalstate:
+    # if state["is_empty_result"]:
+    #     return "empty_result" 
+    if state["query_results"] == "Query executed successfully":
+        return "success"
+    else:
+        return "failed"
+    
+# Defining nodes
+graph = StateGraph(finalstate)
 
-The output should be a **clear rewritten query** suitable for generating SQL.
-Do NOT return SQL from this tool — only return the rewritten data question.
-"""
-)
+graph.add_node("clean_query_node", clean_query_node)
+graph.add_node("find_tables_node", find_tables_node)
+graph.add_node("create_sql_query", create_sql_query)
+graph.add_node("execute_sql_query", execute_sql_query)
+graph.add_node("rewrite_sql_query", rewrite_sql_query)
+graph.add_node("summarise_results", summarise_results)
 
-current_date_tool = Tool(
-    name="CurrentDateProvider",
-    func=get_today_date,
-    description="""
-Returns today's date in YYYY-MM-DD format.
+# edges
+graph.add_edge(START, 'clean_query_node')
+graph.add_edge('clean_query_node', 'find_tables_node')
+graph.add_edge('find_tables_node', 'create_sql_query')
+graph.add_edge('create_sql_query', 'execute_sql_query')
+graph.add_conditional_edges('execute_sql_query', check_query_failed, {"success" : "summarise_results", "failed" : "rewrite_sql_query"})
+graph.add_edge('rewrite_sql_query', 'execute_sql_query')
+graph.add_edge('summarise_results', END)
 
-Use this when the user asks about:
-- Sales/orders "today"
-- Discounts/schemes active "today"
-- Anything filtered to the current date
-
-Always call this before generating SQL if the query depends on "today".
-"""
-)
+workflow = graph.compile()
 
 
-calculator = Tool(
-    name="calculator",
-    func=calculator_tool,
-    description="Use this tool to perform basic math like 5+3, 10/2, 4*6, 12-4,percentage. Input should be a valid arithmetic expression."
-)
-
-sql_cleanup_tool = Tool(
-    name="clean_sql_query",
-    func=clean_sql_query,
-    description="Cleans SQL input by removing markdown formatting like ```sql ... ```. Use before passing to the SQL executor if needed."
-)
-
-toolkit = SQLDatabaseToolkit(db=db, llm=llm)
-tools = toolkit.get_tools() + [relationship_tool, info_example_tool,query_rewriter_tool,current_date_tool,calculator,sql_cleanup_tool]
-agent = initialize_agent(
-    tools=tools,
-    llm=llm,
-    agent_type=AgentType.OPENAI_FUNCTIONS,
-    verbose=True,
-    handle_parsing_errors=True,
-    agent_kwargs=
- {
-  "system_message": """
-  
-  "You are an expert SQL assistant helping query a SQLite-based retail database. Your users are non-technical (e.g., retailers, sales reps).
-
-🧠 Behavior Instructions:
-1. If the user question is vague, casual, or not specific enough, first use the tool `UserQueryRewriter` to rewrite it.
-When reasoning:
-- Use Thought to think step-by-step.
-- Use Action to indicate which tool you will use.
-- Use Action Input to provide the exact input for that tool.
-
-Use this format strictly:
-- Thought: <your reasoning>
-- Action: <Tool name or Final Answer>
-- Action Input: <tool input or final response>
-
-🧠 Behavior Guidelines:
-1. Always make sure the SQL is syntactically correct for SQLite.
-2. Use table and column names exactly as they exist in the database.
-3. Show only SELECT queries unless asked otherwise.
-4. Use LIMIT 5 by default unless the user asks for more.
-5. When answering questions like \"what's the margin of X\", return SKU_Name and computed margin (MRP - Price).
-6. Keep answers short, retailer-friendly, and non-technical.
-
-⚠️ SQL Output Rules:
-- Do NOT use triple backticks or markdown formatting.
-- SQL must be plain text only — safe to execute without preprocessing.
-- Do not include 'sql' in the beginning of the text or any explanation before or after the query.
-- Use 'like' or 'lower(column) like lower(?)' for case-insensitive filters.
-- If you got blank result via SQL queries then report null with correct context.
-
-📦 Examples:
-
-✅ Example 1 — User: Which product sold the most?
-Action: Final Answer  
-Action Input:  
-SELECT sku_name, SUM(order_quantity) AS total_quantity_sold  
-FROM retailer_order_product_details  
-GROUP BY sku_name  
-ORDER BY total_quantity_sold DESC  
-LIMIT 1;
-
-✅ Example 2 — User: Show me the top 5 SKUs by margin  
-Action: Final Answer  
-Action Input:  
-SELECT sku_name, (mrp - price) AS margin  
-FROM products  
-ORDER BY margin DESC  
-LIMIT 5;
-
-✅ Example 3 — User: What's the total sales for Parle G?  
-Action: Final Answer  
-Action Input:  
-SELECT sku_name, SUM(order_amount) AS total_sales  
-FROM retailer_order_product_details  
-WHERE lower(sku_name) LIKE lower('%parle g%')  
-GROUP BY sku_name;
-
-✅ Example 4 — User: List all retailers in Delhi  
-Action: Final Answer  
-Action Input:  
-SELECT retailer_name, city  
-FROM retailers  
-WHERE lower(city) LIKE lower('%delhi%')  
-LIMIT 5;
-
-✅ Example 5 — User: Get last 5 orders  
-Action: Final Answer  
-Action Input:  
-SELECT order_id, retailer_id, order_date, order_amount  
-FROM retailer_orders  
-ORDER BY order_date DESC  
-LIMIT 5;
-"""
-}
-)
 
 
 def llm_reply(text):
     # try:
-    response = agent.run(text)
+    response = workflow.invoke({"user_query" : text, "is_empty_result" : False})
         # sql_match = re.search(r"(SELECT\s.+?;)", response, re.IGNORECASE | re.DOTALL)
 
         # if not sql_match:
@@ -330,6 +259,6 @@ async def receive_whatsapp_message(request: Request):
     
     reply = llm_reply(text)
     send_message(str(sender_id), reply)
-    return {"status": "OK"} 
+    return {"status": "OK", "reply":reply} 
 
     
