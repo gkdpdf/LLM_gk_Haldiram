@@ -1,29 +1,50 @@
 # service.py
+from __future__ import annotations
+
 from pathlib import Path
 import glob
-from typing import TypedDict, Any, Optional
+from typing import TypedDict, Any, Optional, List
 import inspect
-from dotenv import load_dotenv
+import os
 
 import pandas as pd
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
-from sqlalchemy.types import Date, Numeric, String, Integer, TIMESTAMP
+from sqlalchemy.types import Date, Numeric, String, Integer
 
-from langchain_openai import ChatOpenAI
+try:
+    from langchain_openai import ChatOpenAI
+except Exception:
+    ChatOpenAI = None  # optional
+
 from langgraph.graph import StateGraph, START, END
 
-# === Agents (must exist in ./agents/)
-from agents.sql_cleaned_query_agent import clean_query_node  # your existing cleaner
+# === Agents ===
+try:
+    from agents.sql_cleaned_query_agent import clean_query_node
+except Exception:
+    def clean_query_node(state: dict) -> dict:
+        uq = (state.get("user_query") or "").strip()
+        state["cleaned_user_query"] = uq
+        state["final_answer"] = False
+        return state
+
 from agents.find_tables import find_tables_node
 from agents.create_sql_query import create_sql_query
 from agents.execute_sql_query import execute_sql_query
 from agents.check_entity_node import check_entity_node
-from agents.summarize_results import summarize_results          # your existing summarizer
-from agents.rewrite_sql_query import rewrite_sql_query          # your existing rewriter
+from agents.summarize_results import summarize_results
 
-# ---------------------------------------------------------------------
-# Globals (lazy init)
+try:
+    from agents.rewrite_sql_query import rewrite_sql_query
+    _REWRITE_AVAILABLE = True
+except Exception:
+    _REWRITE_AVAILABLE = False
+    def rewrite_sql_query(state: dict) -> dict:
+        state["retry_count"] = int(state.get("retry_count", 0)) + 1
+        return state
+
 # ---------------------------------------------------------------------
 _engine: Optional[Engine] = None
 _workflow = None
@@ -31,9 +52,6 @@ _llm = None
 
 __all__ = ["get_engine", "llm_reply"]
 
-# ---------------------------------------------------------------------
-# Config / helpers
-# ---------------------------------------------------------------------
 load_dotenv(override=True)
 
 TABLE_COLUMN_TYPES = {
@@ -41,6 +59,7 @@ TABLE_COLUMN_TYPES = {
         "bill_date": Date,
         "sales_order_date": Date,
         "invoiced_total_quantity": Numeric,
+        "ordered_quantity": Numeric,
         "distributor_id": String,
         "distributor_name": String,
         "product_id": String,
@@ -60,35 +79,31 @@ TABLE_COLUMN_TYPES = {
         "material_description": String,
     },
     "tbl_product_master": {
-        "industy_segment_name": String,
-        "pack_size_name": String,
         "base_pack_design_name": String,
-        "industy_segment_id": String,
-        "pack_size_id": String,
-        "base_pack_design_id": String,
         "product_name": String,
-        "ptr": Numeric,
-        "ptd": Numeric,
-        "display_mrp": Integer,
-        "mrp": Integer,
         "alternate_product_category": String,
         "product_id": String,
-        "is_promoted": String,
-        "product_weight_in_gm": Integer,
+        "product": String,
+        "material": String,
+        "product_erp_id": String,
     },
     "tbl_superstockist_master": {
         "superstockist_name": String,
+        "super_stockist_name": String,
         "superstockist_id": Integer,
+        "state": String,
+        "region": String,
+        "city": String,
+        "sales_district": String,
     },
     "tbl_distributor_master": {
         "superstockist_name": String,
         "distributor_name": String,
-        "distributor_erp_id": Integer,
-        "distributor_channel": String,
-        "distributor_segmentation": String,
+        "name": String,
+        "distributor_erp_id": String,
+        "distributor_code": String,
         "state": String,
         "city_of_warehouse_address": String,
-        "temp_created_date": Date,
     },
 }
 
@@ -103,15 +118,17 @@ DATE_COLUMNS = {
 }
 
 def _configure_db_postgres() -> Engine:
-    # Change DSN if needed
-    pg_engine = create_engine(
-        "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram_primary"
-    )
+    dsn = os.getenv("DATABASE_URL") or "postgresql+psycopg2://postgres:12345678@localhost:5432/LLM_Haldiram_primary"
+    pg_engine = create_engine(dsn, pool_pre_ping=True)
     csv_folder = Path.cwd() / "cooked_data_gk"
     if csv_folder.exists():
         for csv_file in glob.glob(str(csv_folder / "*.csv")):
             table_name = Path(csv_file).stem.lower()
-            df = pd.read_csv(csv_file)
+            try:
+                df = pd.read_csv(csv_file)
+            except Exception as e:
+                print(f"❌ Could not read {csv_file}: {e}")
+                continue
 
             if table_name in DATE_COLUMNS:
                 for col, fmt in DATE_COLUMNS[table_name].items():
@@ -137,37 +154,28 @@ def _configure_db_postgres() -> Engine:
     return pg_engine
 
 def _build_llm():
-    return ChatOpenAI(
-        model="gpt-4o",
-        temperature=0,
-        max_tokens=None,
-        timeout=None,
-        max_retries=2,
-    )
+    if ChatOpenAI is None:
+        return None
+    try:
+        return ChatOpenAI(model="gpt-4o", temperature=0, max_retries=2)
+    except Exception:
+        return None
 
 class FinalState(TypedDict, total=False):
     user_query: str
     cleaned_user_query: str
     tables: list[str]
+    allowed_tables: list[str]
     sql_query: str
     query_result: str
     exec_success: bool
     error_message: str
     rows: list
     columns: list
-    identified_entity: str | None
-    matched_entity_value: str | None
-    confidence: float
-    method: str
-    fallback_intents: list
     retry_count: int
     final_answer: bool
-    awaiting_route_choice: bool
     route_preference: str
     session_id: str
-    measure_override: str
-    date_override: str
-    months_override: int
     engine: Any
 
 MAX_RETRIES = 2
@@ -177,48 +185,39 @@ def _exec_router(s: dict):
         return "summarize_results"
     if s.get("exec_success"):
         return "summarize_results"
-    if int(s.get("retry_count", 0)) < MAX_RETRIES:
+    if int(s.get("retry_count", 0)) < MAX_RETRIES and _REWRITE_AVAILABLE:
         return "rewrite_sql_query"
     return "summarize_results"
 
-def _check_entity_wrapper(state):
-    # Avoid signature mismatch crashes
-    _ensure_initialized()
-    try:
-        arity = len(inspect.signature(check_entity_node).parameters)
-    except Exception:
-        arity = 2
-    if arity >= 2:
-        return check_entity_node(state, _engine)
-    return check_entity_node(state)
-
 def _build_workflow():
-    graph = StateGraph(FinalState)
-    graph.add_node("clean_query_node", clean_query_node)
-    graph.add_node("check_entity_node", lambda s, _e=_engine: check_entity_node(s, _e))
-    graph.add_node("find_tables_node", find_tables_node)
-    graph.add_node("create_sql_query", create_sql_query)
-    graph.add_node("execute_sql_query", execute_sql_query)
-    graph.add_node("rewrite_sql_query", rewrite_sql_query)
-    graph.add_node("summarize_results", summarize_results)
+    g = StateGraph(FinalState)
+    g.add_node("clean_query_node", clean_query_node)
+    g.add_node("check_entity_node", lambda s, _e=_engine: check_entity_node(s, _e))
+    g.add_node("find_tables_node", find_tables_node)
+    g.add_node("create_sql_query", create_sql_query)
+    g.add_node("execute_sql_query", execute_sql_query)
+    if _REWRITE_AVAILABLE:
+        g.add_node("rewrite_sql_query", rewrite_sql_query)
+    g.add_node("summarize_results", summarize_results)
 
-    graph.add_edge(START, "clean_query_node")
-    graph.add_conditional_edges(
+    g.add_edge(START, "clean_query_node")
+    g.add_conditional_edges(
         "clean_query_node",
         lambda s: "summarize_results" if s.get("final_answer") else "check_entity_node",
         {"summarize_results": "summarize_results", "check_entity_node": "check_entity_node"}
     )
-    graph.add_edge("check_entity_node", "find_tables_node")
-    graph.add_edge("find_tables_node", "create_sql_query")
-    graph.add_edge("create_sql_query", "execute_sql_query")
-    graph.add_conditional_edges(
+    g.add_edge("check_entity_node", "find_tables_node")
+    g.add_edge("find_tables_node", "create_sql_query")
+    g.add_edge("create_sql_query", "execute_sql_query")
+    g.add_conditional_edges(
         "execute_sql_query",
         _exec_router,
-        {"summarize_results": "summarize_results", "rewrite_sql_query": "rewrite_sql_query"}
+        {"summarize_results": "summarize_results"} | ({"rewrite_sql_query": "rewrite_sql_query"} if _REWRITE_AVAILABLE else {})
     )
-    graph.add_edge("rewrite_sql_query", "execute_sql_query")
-    graph.add_edge("summarize_results", END)
-    return graph.compile()
+    if _REWRITE_AVAILABLE:
+        g.add_edge("rewrite_sql_query", "execute_sql_query")
+    g.add_edge("summarize_results", END)
+    return g.compile()
 
 def _ensure_initialized():
     global _engine, _llm, _workflow
@@ -230,19 +229,28 @@ def _ensure_initialized():
     if _workflow is None:
         _workflow = _build_workflow()
 
-# -------- Public API --------
 def get_engine() -> Engine:
     _ensure_initialized()
     return _engine  # type: ignore
 
-def llm_reply(txt: str, *, session_id: str | None = None, route_pref: str | None = None) -> dict:
+def llm_reply(
+    txt: str,
+    *,
+    session_id: str | None = None,
+    route_pref: str | None = None,
+    allowed_tables: Optional[List[str]] = None,
+) -> dict:
     _ensure_initialized()
-    initial_state: FinalState = {
+    state: FinalState = {
         "user_query": txt,
         "engine": _engine,
+        "retry_count": 0,
+        "final_answer": False,
     }
-    if session_id:
-        initial_state["session_id"] = session_id
     if route_pref:
-        initial_state["route_preference"] = route_pref
-    return _workflow.invoke(initial_state)
+        state["route_preference"] = route_pref
+    if allowed_tables:
+        state["allowed_tables"] = list(allowed_tables)
+    if session_id:
+        state["session_id"] = session_id
+    return _workflow.invoke(state)

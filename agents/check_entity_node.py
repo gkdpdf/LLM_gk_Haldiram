@@ -1,26 +1,32 @@
 # agents/check_entity_node.py
 from __future__ import annotations
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 import re
 from difflib import SequenceMatcher
+from functools import lru_cache
 
-# Probe order favors ACTORS first (so "sb marke plus" hits superstockist, not product)
+# Probe order: actors first
 PRIMARY_FIRST  = ["super_stockist_name", "distributor_name", "product_name", "material_description", "material"]
 SHIPMENT_FIRST = ["sold_to_party_name", "material_description", "city", "sales_district", "material"]
 
-PRODUCT_DIM_COLS       = ["product_name", "base_pack_design_name", "material_description", "alternate_product_category"]
-DISTRIBUTOR_DIM_COLS   = ["distributor_name"]
-SUPERSTOCKIST_DIM_COLS = ["superstockist_name"]
+PRODUCT_DIM_COLS       = ["base_pack_design_name","product_name","material_description","material",
+                          "product_id","product","material_code","product_erp_id"]
+DISTRIBUTOR_DIM_COLS   = ["distributor_name","name","distributor_erp_id","distributor_code"]
+SUPERSTOCKIST_DIM_COLS = ["superstockist_name","super_stockist_name","superstockist_id","sold_to_party_name"]
 
 STOPWORDS = {
-    "total","overall","sales","sale","sold","amount","value","qty","quantity","units","pieces","pcs",
+    "total","overall","sales","sale","sold","amount","value","qty","quantity","quantities","units","pieces","pcs",
     "of","for","in","last","this","that","these","those","month","months","week","weeks","day","days","year","years",
-    "please","pls","plz","clarify","your","you","me","kindly","the","and","or","to","from","by","on","at","a","an","is","are","was","were"
+    "please","pls","plz","clarify","your","you","me","kindly","the","and","or","to","from","by","on","at","a","an",
+    "is","are","was","were","my","what","which","who","has","have","with","per","across","each","area","state","region",
+    "sku","skus","product","products","mom","m-o-m","growth","growing","increase","decrease","decline","trend","trends",
+    "top","best","highest","most","less","more","greater","than","bought","buy","distinct","count"
 }
 
 _USER_Q_RE = re.compile(r"USER QUESTION:\s*(.*)", re.IGNORECASE | re.DOTALL)
+
 def _effective_text(s: str) -> str:
     if not s: return ""
     m = _USER_Q_RE.search(s)
@@ -36,47 +42,78 @@ def _table_exists(engine: Engine, table: str) -> bool:
 def _existing_columns(engine: Engine, table: str) -> List[str]:
     with engine.connect() as conn:
         return [r[0] for r in conn.execute(
-            text("SELECT column_name FROM information_schema.columns WHERE table_name = :t"),
+            text("SELECT column_name FROM information_schema.columns WHERE table_name = :t ORDER BY ordinal_position"),
             {"t": table}
         ).fetchall()]
 
-def _distinct_values(engine: Engine, table: str, column: str, limit: int = 4000) -> List[str]:
+@lru_cache(maxsize=256)
+def _distinct_cached(db_key: str, table: str, column: str, limit: int) -> Tuple[str, ...]:
+    from sqlalchemy import create_engine
+    eng = create_engine(db_key)
     sql = text(f'SELECT DISTINCT {column} FROM "{table}" WHERE {column} IS NOT NULL LIMIT :lim')
-    with engine.connect() as conn:
-        return [str(r[0]).strip() for r in conn.execute(sql, {"lim": limit}) if r[0] is not None]
+    with eng.connect() as conn:
+        vals = [str(r[0]).strip() for r in conn.execute(sql, {"lim": limit}) if r[0] is not None]
+    return tuple(vals)
 
-# ---------- fuzzy matching ----------
-def _norm(s: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", (s or "").lower())
+def _distinct_values(engine: Engine, table: str, column: str, limit: int = 4000) -> List[str]:
+    try:
+        db_key = engine.url.render_as_string(hide_password=True)
+        return list(_distinct_cached(db_key, table, column, limit))
+    except Exception:
+        sql = text(f'SELECT DISTINCT {column} FROM "{table}" WHERE {column} IS NOT NULL LIMIT :lim')
+        with engine.connect() as conn:
+            return [str(r[0]).strip() for r in conn.execute(sql, {"lim": limit}) if r[0] is not None]
 
-def _score(user_text: str, candidate: str) -> float:
-    if not candidate: return 0.0
-    u = _norm(user_text)
-    c = _norm(candidate)
-    if not u or not c: return 0.0
-    contain = 1.0 if u in c else 0.0
-    toks = [t for t in re.findall(r"[a-z0-9]+", (user_text or "").lower()) if t not in STOPWORDS]
-    cov = (sum(1 for t in toks if t in c) / len(toks)) if toks else 0.0
-    ratio = SequenceMatcher(None, u, c).ratio()
-    return max(ratio, 0.85 * contain + 0.15 * cov)
+# ---------- token & confirm helpers ----------
+def _tokens(q: str) -> List[str]:
+    words = re.findall(r"[A-Za-z0-9][A-Za-z0-9_\-]+", (q or ""))
+    out = []
+    seen = set()
+    for w in words:
+        wl = w.lower()
+        if wl in STOPWORDS: continue
+        if len(wl) < 3: continue
+        if wl not in seen:
+            seen.add(wl)
+            out.append(wl)
+    return out
 
-def _best_match(user_text: str, values: List[str]) -> Tuple[Optional[str], float]:
-    best_v, best_s = None, 0.0
+def _match_ok(token: str, candidate: str) -> bool:
+    t = token.lower()
+    c = (candidate or "").lower()
+    if not t or not c: return False
+    words = re.findall(r"[a-z0-9]+", c)
+
+    if len(t) < 4:
+        for w in words:
+            if t == w or SequenceMatcher(None, t, w).ratio() >= 0.92:
+                return True
+        return False
+
+    if t in c: return True
+    for w in words:
+        if SequenceMatcher(None, t, w).ratio() >= 0.90:
+            return True
+    return False
+
+def _collect_matches(engine: Engine, table: str, col: str, toks: List[str]) -> bool:
+    """Return True if any DISTINCT value matches tokens (strict-ish)."""
+    try:
+        values = _distinct_values(engine, table, col)
+    except Exception:
+        return False
     for v in values:
-        s = _score(user_text, v)
-        if s > best_s:
-            best_v, best_s = v, s
-    return best_v, best_s
+        if any(_match_ok(t, v) for t in toks):
+            return True
+    return False
 
 def check_entity_node(state: Dict, engine: Engine) -> Dict:
     """
-    Fuzzy-detect entity mentions (super stockist / distributor / product).
+    Distinct-based entity confirmer (strict; no fuzzy scores).
     Writes:
-      - route_preference ('primary'|'shipment') if missing
-      - identified_entity (column name)
-      - matched_entity_value (DB string)
-      - entity_physical_col ('table.column')
-      - confidence (0..1)
+      - route_preference
+      - confirmed_entities: ['distributor','product','superstockist']
+      - tokens: normalized tokens extracted from user text
     """
     if engine is None:
         state.update(final_answer=True, query_result="-- Error: No SQLAlchemy engine in state.")
@@ -84,9 +121,7 @@ def check_entity_node(state: Dict, engine: Engine) -> Dict:
 
     raw_in = (state.get("user_query") or state.get("cleaned_user_query") or "").strip()
     user_text = _effective_text(raw_in)
-    if not user_text:
-        state.update(identified_entity=None, matched_entity_value=None, entity_physical_col=None, confidence=0.0)
-        return state
+    toks = _tokens(user_text)
 
     route_pref = (state.get("route_preference") or "").lower().strip()
     if route_pref not in ("primary", "shipment"):
@@ -94,7 +129,10 @@ def check_entity_node(state: Dict, engine: Engine) -> Dict:
         route_pref = "shipment" if any(k in s for k in ("shipment", "dispatch", "secondary", "delivery", "invoice")) else "primary"
     state["route_preference"] = route_pref
 
-    # Probe order: prefer actors first
+    if not toks:
+        state.update(confirmed_entities=[], tokens=[], final_answer=False)
+        return state
+
     if route_pref == "primary":
         fact_tables = ["tbl_primary"]
         fact_cols_order = PRIMARY_FIRST
@@ -102,79 +140,45 @@ def check_entity_node(state: Dict, engine: Engine) -> Dict:
         fact_tables = ["tbl_shipment", "tbl_dispatch", "tbl_secondary", "tbl_shipments"]
         fact_cols_order = SHIPMENT_FIRST
 
-    candidates: List[Tuple[str, str, str, float]] = []
+    confirmed = set()
 
-    # 1) fact tables
+    # Look in fact tables first
     for tbl in fact_tables:
         if not _table_exists(engine, tbl): continue
         existing = set(_existing_columns(engine, tbl))
         for col in [c for c in fact_cols_order if c in existing]:
-            try:
-                vals = _distinct_values(engine, tbl, col)
-            except Exception:
-                continue
-            mv, sc = _best_match(user_text, vals)
-            if mv:
-                candidates.append((tbl, col, mv, sc))
+            ok = _collect_matches(engine, tbl, col, toks)
+            if not ok: continue
+            cl = col.lower()
+            if "sold_to_party" in cl or "super_stockist" in cl or "superstockist" in cl:
+                confirmed.add("superstockist")
+            elif "distributor" in cl:
+                confirmed.add("distributor")
+            elif "product" in cl or "material" in cl or "description" in cl:
+                confirmed.add("product")
 
-    # 2) dimensions — superstockist, distributor, then product master
+    # Dimensions
     if _table_exists(engine, "tbl_superstockist_master"):
         ex = set(_existing_columns(engine, "tbl_superstockist_master"))
         for col in [c for c in SUPERSTOCKIST_DIM_COLS if c in ex]:
-            try:
-                vals = _distinct_values(engine, "tbl_superstockist_master", col)
-            except Exception:
-                vals = []
-            mv, sc = _best_match(user_text, vals)
-            if mv:
-                candidates.append(("tbl_superstockist_master", col, mv, sc))
+            if _collect_matches(engine, "tbl_superstockist_master", col, toks):
+                confirmed.add("superstockist")
 
     if _table_exists(engine, "tbl_distributor_master"):
         ex = set(_existing_columns(engine, "tbl_distributor_master"))
         for col in [c for c in DISTRIBUTOR_DIM_COLS if c in ex]:
-            try:
-                vals = _distinct_values(engine, "tbl_distributor_master", col)
-            except Exception:
-                vals = []
-            mv, sc = _best_match(user_text, vals)
-            if mv:
-                candidates.append(("tbl_distributor_master", col, mv, sc))
+            if _collect_matches(engine, "tbl_distributor_master", col, toks):
+                confirmed.add("distributor")
 
     if _table_exists(engine, "tbl_product_master"):
         ex = set(_existing_columns(engine, "tbl_product_master"))
         for col in [c for c in PRODUCT_DIM_COLS if c in ex]:
-            try:
-                vals = _distinct_values(engine, "tbl_product_master", col)
-            except Exception:
-                vals = []
-            mv, sc = _best_match(user_text, vals)
-            if mv:
-                candidates.append(("tbl_product_master", col, mv, sc))
+            if _collect_matches(engine, "tbl_product_master", col, toks):
+                confirmed.add("product")
 
-    # Rank: actors > score > string length
-    def _priority(col: str) -> int:
-        if "super_stockist" in col or "superstockist" in col: return 3
-        if "distributor" in col: return 2
-        if "product" in col or "material" in col or "description" in col: return 1
-        return 0
-
-    if candidates:
-        candidates.sort(key=lambda t: (_priority(t[1]), t[3], len(t[2] or "")), reverse=True)
-        tbl, col, mv, sc = candidates[0]
-        state.update(
-            identified_entity=col,
-            matched_entity_value=mv,
-            entity_physical_col=f"{tbl}.{col}",
-            confidence=float(sc),
-            final_answer=False
-        )
-    else:
-        state.update(
-            identified_entity=None,
-            matched_entity_value=None,
-            entity_physical_col=None,
-            confidence=0.0,
-            final_answer=False
-        )
-
+    state.update(
+        confirmed_entities=sorted(confirmed),
+        tokens=toks,
+        final_answer=False
+    )
     return state

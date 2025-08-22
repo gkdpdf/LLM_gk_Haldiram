@@ -52,7 +52,8 @@
 ["This table serves as a master reference for mapping Super Stockist names to their corresponding ERP IDs, facilitating the identification and referencing of super stockists across distribution and supply chain datasets. It is crucial for hierarchy-level reporting and regional inventory analysis.", 
 [
     ["superstockist_name : The name of the super stockist, represented as a string. It is used to identify the super stockist in the supply chain. <sample values: Kansal Estate Private Limited, S B Markplus Private Limited-2, etc.>"],
-    ["superstockist_id : The unique ERP ID associated with each super stockist, represented as an integer. This ID is used for referencing in various datasets. <sample values: 19000149, 19000102, etc.>"]
+    ["superstockist_id : The unique ERP ID associated with each super stockist, represented as an integer. This ID is used for referencing in various datasets. <sample values: 19000149, 19000102, etc.>"],
+    ["state : State associated with each super stockist, represented as a string.  <sample values: Delhi,Punjab, etc.>"]
 ]]
 ```
 

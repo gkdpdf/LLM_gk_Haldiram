@@ -1,17 +1,12 @@
 # agents/create_sql_query.py
 from __future__ import annotations
-import re, json, pickle
+import re, json
 from typing import Dict, List, Optional, Tuple
+from difflib import SequenceMatcher
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-# -------- Optional KB & relationships (used if available) --------
-try:
-    with open("kb_haldiram_primary.pkl", "rb") as f:
-        _KB: Dict[str, str] = pickle.load(f)
-except Exception:
-    _KB = {}
-
+# ---- optional relationships file ----
 try:
     with open("relationship_tables.txt", "r", encoding="utf-8") as f:
         _REL_RAW = f.read()
@@ -73,13 +68,11 @@ def _first_working_key(engine: Engine, fact: str, dim: str) -> Optional[Tuple[st
     if rel and rel[0] in fcols and rel[1] in dcols:
         return rel
     pairs = [
-        ("product_id","product_id"),
-        ("material","product_id"),
-        ("base_pack_design_id","base_pack_design_id"),
-        ("sku_id","sku_id"),
-        ("distributor_id","distributor_erp_id"),
-        ("super_stockist_id","superstockist_id"),
-        ("sold_to_party","superstockist_id"),
+        ("product_id","product_id"), ("product_id","product"), ("product_id","product_erp_id"),
+        ("material","product_id"), ("material","product"), ("material","material"), ("material","material_code"),
+        ("sku_id","sku_id"), ("base_pack_design_id","base_pack_design_id"),
+        ("distributor_id","distributor_erp_id"), ("distributor_code","distributor_code"),
+        ("sold_to_party","superstockist_id"), ("sold_to_party","sold_to_party"),
     ]
     for fkey, dkey in pairs:
         if fkey in fcols and dkey in dcols:
@@ -89,17 +82,14 @@ def _first_working_key(engine: Engine, fact: str, dim: str) -> Optional[Tuple[st
             return (c, c)
     return None
 
-# ---------------- Parse real question ----------------
+# ---------------- Parse the question ----------------
 _USER_Q_RE = re.compile(r"USER QUESTION:\s*(.*)", re.IGNORECASE | re.DOTALL)
 def _question(state: dict) -> str:
     raw = (state.get("user_query") or "").strip()
     m = _USER_Q_RE.search(raw)
     return (m.group(1).strip() if m else raw)
 
-_NUM_WORDS = {
-    "one":1,"two":2,"three":3,"four":4,"five":5,"six":6,
-    "seven":7,"eight":8,"nine":9,"ten":10,"eleven":11,"twelve":12
-}
+_NUM_WORDS = {"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,"ten":10}
 
 def _parse_window(q: str) -> Optional[str]:
     t = (q or "").lower()
@@ -108,7 +98,7 @@ def _parse_window(q: str) -> Optional[str]:
         n, unit = int(m.group(1)), m.group(2)
         if not unit.endswith("s"): unit += "s"
         return f"{n} {unit}"
-    m = re.search(r"last\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(month|months|week|weeks|day|days|year|years)\b", t)
+    m = re.search(r"last\s+(one|two|three|four|five|six|seven|eight|nine|ten)\s*(month|months|week|weeks|day|days|year|years)\b", t)
     if m:
         n = _NUM_WORDS[m.group(1)]
         unit = m.group(2)
@@ -119,58 +109,55 @@ def _parse_window(q: str) -> Optional[str]:
     if re.search(r"\blast\s+day\b",   t): return "1 days"
     return None
 
-def _strip_time_numbers(q: str) -> str:
-    t = (q or "").lower()
-    t = re.sub(r"last\s+\d+\s*(months?|weeks?|days?|years?)", "", t)
-    t = re.sub(r"last\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(months?|weeks?|days?|years?)", "", t)
-    return t
-
 def _parse_topn(q: str) -> Optional[int]:
     t = (q or "").lower()
-    if not re.search(r"\b(top|highest|best|most)\b", t):
-        return None
-    t_wo_time = _strip_time_numbers(t)
-    m = re.search(r"\b(\d{1,3})\b", t_wo_time)
+    m = re.search(r"\btop\s+(\d{1,3})\b", t)
     if m: return int(m.group(1))
-    if re.search(r"\b(most|best|highest)\b", t): return 1
-    if "top" in t: return 10
+    m = re.search(r"\btop\s+(one|two|three|four|five|six|seven|eight|nine|ten)\b", t)
+    if m: return _NUM_WORDS[m.group(1)]
     return None
 
-def _parse_metric_hint(q: str) -> str:
+def _parse_threshold(q: str) -> Optional[Tuple[str,int]]:
     t = (q or "").lower()
-    if any(k in t for k in ("revenue","value","amount","rs","₹","inr")): return "value"
-    if any(k in t for k in ("qty","quantity","units","volume","pieces","pcs","billed","sold")): return "qty"
-    return "auto"
+    m = re.search(r"\b(less\s+than|greater\s+than|over|under)\s+(\d{1,9})\s*(qty|quantity|units|pieces|pcs)?\b", t)
+    if not m: return None
+    op = m.group(1)
+    n = int(m.group(2))
+    if "less" in op or "under" in op: return ("<", n)
+    return (">", n)
 
-# ---------- Entity hints ----------
-_SUPERSTOCKIST_HINT = re.compile(r"super\s*stock(?:ist|er|iest|ists|ers)?|sold[_\s-]*to[_\s-]*party|sold[_\s-]*to[_\s-]*party[_\s-]*name", re.IGNORECASE)
-_DISTRIBUTOR_HINT   = re.compile(r"distribut(?:or|ers|ion)?", re.IGNORECASE)
-_PRODUCT_HINT       = re.compile(r"\b(product|sku|material)\b", re.IGNORECASE)
-
-def _explicit_entity_from_text(q: str) -> Optional[str]:
-    if _SUPERSTOCKIST_HINT.search(q): return "superstockist"
-    if _DISTRIBUTOR_HINT.search(q):   return "distributor"
-    if _PRODUCT_HINT.search(q):       return "product"
-    return None
-
-def _breakdown_kind_from_text(q: str) -> Optional[str]:
-    """Return entity kind if the user asked for a breakdown 'by <entity>'."""
+_MONTHS = {
+    "jan":1,"january":1,"feb":2,"february":2,"mar":3,"march":3,"apr":4,"april":4,"may":5,
+    "jun":6,"june":6,"jul":7,"july":7,"aug":8,"august":8,"sep":9,"sept":9,"september":9,
+    "oct":10,"october":10,"nov":11,"november":11,"dec":12,"december":12
+}
+def _parse_absolute_date(q: str) -> Optional[str]:
     t = (q or "").lower()
-    if re.search(r"\bby\s+product(s)?\b", t): return "product"
-    if re.search(r"\bby\s+distribut(or|or[s])\b", t): return "distributor"
-    if re.search(r"\bby\s+super\s*stock(?:ist|er|ists)?\b", t): return "superstockist"
-    if re.search(r"\bby\s+plant\b", t): return "plant"
-    if re.search(r"\bby\s+city\b", t): return "city"
+    m = re.search(r"\b(\d{1,2})(st|nd|rd|th)?\s+([a-z]+)\s+(\d{4})\b", t)
+    if m:
+        d = int(m.group(1)); mon = _MONTHS.get(m.group(3)[:3], None); y = int(m.group(4))
+        if mon: return f"{y:04d}-{mon:02d}-{d:02d}"
+    m = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b", t)
+    if m:
+        d = int(m.group(1)); mon = int(m.group(2)); y = int(m.group(3))
+        return f"{y:04d}-{mon:02d}-{d:02d}"
     return None
 
-# ------------- Tokens (for name/description LIKE filters) -------------
+def _parse_month_year(q: str) -> Optional[Tuple[int, Optional[int]]]:
+    t = (q or "").lower()
+    m = re.search(r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b(?:\s+(\d{4}))?", t)
+    if not m: return None
+    mon = _MONTHS[m.group(1)]
+    year = int(m.group(2)) if m.group(2) else None
+    return mon, year
+
 STOP = {
-    "total","overall","sales","sale","sold","amount","value","qty","quantity","units","volume","pieces","pcs",
+    "total","overall","sales","sale","sold","amount","value","qty","quantity","quantities","units","volume","pieces","pcs",
     "for","of","in","by","last","this","that","these","those","month","months","week","weeks","day","days","year","years",
     "the","a","an","and","or","to","from","with","has","have","is","are","was","were","most","top","best","highest",
-    "product","products","distributor","distributors","super","stockist","stockists","stocker","stockers","sb","s","b"  # keep generic
+    "product","products","distributor","distributors","super","stockist","stockists","area","state","region","city","each",
+    "who","bought","less","more","greater","than","mom","m-o-m","growth","growing","across","per","each","plus","'s"
 }
-
 def _tokens(q: str) -> List[str]:
     words = re.findall(r"[A-Za-z0-9][A-Za-z0-9_\-]+", (q or ""))
     out, seen = [], set()
@@ -191,19 +178,30 @@ def _or_like(prefix: str, cols: List[str], toks: List[str]) -> Optional[str]:
             terms.append(f"LOWER({prefix}.{c}) ILIKE LOWER('%{t}%')")
     return "(" + " OR ".join(terms) + ")"
 
+def _approx_has(text: str, term: str, thr: float = 0.88) -> bool:
+    tl = text.lower()
+    term = term.lower()
+    if term in tl: return True
+    for w in re.findall(r"[a-z0-9]+", tl):
+        if SequenceMatcher(None, term, w).ratio() >= thr:
+            return True
+    return False
+
+def _any_terms(text: str, terms: List[str]) -> bool:
+    return any(_approx_has(text, t) for t in terms)
+
 # ---------------- Measure & date pickers ----------------
 def _pick_measure(engine: Engine, fact: str, hint: str) -> Optional[str]:
     cols = _columns(engine, fact)
     names = list(cols.keys())
     value_pref = [c for c in names if any(k in c.lower() for k in ("invoice_value","sales_value","amount","value"))]
-    qty_pref   = [c for c in names if any(k in c.lower() for k in ("invoiced_total_quantity","actual_billed_quantity","qty","quantity"))]
+    qty_pref   = [c for c in names if any(k in c.lower() for k in ("invoiced_total_quantity","actual_billed_quantity","ordered_quantity","qty","quantity"))]
     if hint == "value" and value_pref: return value_pref[0]
     if hint == "qty"   and qty_pref:   return qty_pref[0]
     for c in qty_pref:   return c
     for c in value_pref: return c
     for c, t in cols.items():
-        tl = (t or "").lower()
-        if any(k in tl for k in ("int","numeric","decimal","double","real","bigint","smallint")):
+        if any(k in (t or "").lower() for k in ("int","numeric","decimal","double","real","bigint","smallint")):
             return c
     return None
 
@@ -216,7 +214,140 @@ def _pick_date(engine: Engine, fact: str) -> Optional[str]:
             return c
     return None
 
-# ---------------- Main ----------------
+def _find_product_join_keys(engine: Engine, fact: str) -> Optional[Tuple[str, str]]:
+    if not _table_exists(engine, "tbl_product_master"):
+        return None
+    fcols = set(_columns(engine, fact).keys())
+    dcols = set(_columns(engine, "tbl_product_master").keys())
+    candidates = [
+        ("product_id", "product_id"), ("product_id","product"), ("product_id","product_erp_id"),
+        ("material", "product_id"), ("material","product"), ("material","material"), ("material","material_code"),
+        ("sku_id","sku_id"), ("base_pack_design_id","base_pack_design_id"),
+    ]
+    for fk, dk in candidates:
+        if fk in fcols and dk in dcols:
+            return fk, dk
+    for c in fcols:
+        if c in dcols:
+            return c, c
+    return None
+
+def _product_display_expr(engine: Engine, fact_cols: List[str], have_prod: bool) -> str:
+    if have_prod:
+        dcols = _columns(engine, "tbl_product_master")
+        for cand in ("base_pack_design_name","product_name","material_description"):
+            if cand in dcols:
+                return f"d_prod.{cand}"
+    for cand in ("product_name","material_description"):
+        if cand in fact_cols:
+            return f"p.{cand}"
+    if "product_id" in fact_cols:
+        return "p.product_id::text"
+    if "material" in fact_cols:
+        return "p.material::text"
+    return "'(unknown SKU)'"
+
+def _resolve_distributor_key_label(engine: Engine, fact: str, allowed: set, current_join_sql: str, fact_cols: List[str]) -> Tuple[str, str, str]:
+    join_sql = current_join_sql
+    if "distributor_id" in fact_cols and "distributor_name" in fact_cols:
+        return "p.distributor_id", "p.distributor_name", join_sql
+    if "distributor_id" in fact_cols:
+        return "p.distributor_id", "p.distributor_id::text", join_sql
+    if "distributor_code" in fact_cols and "distributor_name" in fact_cols:
+        return "p.distributor_code", "p.distributor_name", join_sql
+    if "distributor_code" in fact_cols:
+        return "p.distributor_code", "p.distributor_code::text", join_sql
+    if "distributor_name" in fact_cols:
+        return "p.distributor_name", "p.distributor_name", join_sql
+    if _table_exists(engine, "tbl_distributor_master") and (not allowed or "tbl_distributor_master" in allowed):
+        jk = _first_working_key(engine, fact, "tbl_distributor_master")
+        if jk:
+            fkey, dkey = jk
+            join_sql += f'\nLEFT JOIN "tbl_distributor_master" d_dist ON p.{fkey} = d_dist.{dkey}'
+            cols = _columns(engine, "tbl_distributor_master")
+            label = None
+            for c in ("distributor_name","name","distributor_code","distributor_erp_id"):
+                if c in cols:
+                    label = f"d_dist.{c}"; break
+            if not label: label = f"d_dist.{dkey}"
+            return f"d_dist.{dkey}", label, join_sql
+    if "sold_to_party" in fact_cols and "sold_to_party_name" in fact_cols:
+        return "p.sold_to_party", "p.sold_to_party_name", join_sql
+    if "sold_to_party_name" in fact_cols:
+        return "p.sold_to_party_name", "p.sold_to_party_name", join_sql
+    any_col = fact_cols[0] if fact_cols else "1"
+    return any_col, any_col, join_sql
+
+def _resolve_geo_label(engine: Engine, fact: str, allowed: set, current_join_sql: str, fact_cols: List[str]) -> Tuple[str, str, str, List[str]]:
+    join_sql = current_join_sql
+    geo_cols_present = [c for c in ("state","region","sales_district","city","area","district") if c in fact_cols]
+    if geo_cols_present:
+        col = geo_cols_present[0]
+        return f"p.{col}", f"p.{col}", join_sql, geo_cols_present
+    if _table_exists(engine, "tbl_superstockist_master") and (not allowed or "tbl_superstockist_master" in allowed):
+        jk = _first_working_key(engine, fact, "tbl_superstockist_master")
+        if jk:
+            fkey, dkey = jk
+            join_sql += f'\nLEFT JOIN "tbl_superstockist_master" d_ss ON p.{fkey} = d_ss.{dkey}'
+            dcols = _columns(engine, "tbl_superstockist_master")
+            geo_cols = [c for c in ("state","region","sales_district","city","area","district") if c in dcols]
+            if geo_cols:
+                col = geo_cols[0]
+                return f"d_ss.{col}", f"d_ss.{col}", join_sql, geo_cols
+    return "NULL", "NULL", join_sql, []
+
+def _build_entity_filters(state: dict, engine: Engine, fact: str, fact_cols: List[str]) -> Tuple[str, List[str]]:
+    allowed = set(state.get("allowed_tables", []) or state.get("tables", []))
+    confirmed_entities: List[str] = state.get("confirmed_entities", []) or []
+    toks: List[str] = state.get("tokens", []) or _tokens(_question(state))
+
+    join_sql = ""
+    filters: List[str] = []
+
+    # Distributor
+    if "distributor" in confirmed_entities:
+        if _table_exists(engine,"tbl_distributor_master") and (not allowed or "tbl_distributor_master" in allowed):
+            keys = _first_working_key(engine, fact, "tbl_distributor_master") or ("distributor_id","distributor_erp_id")
+            fkey, dkey = keys
+            join_sql += f'\nLEFT JOIN "tbl_distributor_master" d_dist ON p.{fkey} = d_dist.{dkey}'
+            name_cols = [c for c in ("distributor_name","name","distributor_code","distributor_erp_id") if c in _columns(engine,"tbl_distributor_master")]
+            like_dim = _or_like("d_dist", name_cols or [dkey], toks)
+            if like_dim: filters.append(like_dim)
+        if "distributor_name" in fact_cols:
+            like_fact = _or_like("p", ["distributor_name"], toks)
+            if like_fact: filters.append(like_fact)
+
+    # Superstockist
+    if "superstockist" in confirmed_entities:
+        if _table_exists(engine,"tbl_superstockist_master") and (not allowed or "tbl_superstockist_master" in allowed):
+            keys = _first_working_key(engine, fact, "tbl_superstockist_master") or ("sold_to_party","superstockist_id")
+            fkey, dkey = keys
+            join_sql += f'\nLEFT JOIN "tbl_superstockist_master" d_ss ON p.{fkey} = d_ss.{dkey}'
+            name_cols = [c for c in ("superstockist_name","super_stockist_name","sold_to_party_name") if c in _columns(engine,"tbl_superstockist_master")]
+            like_dim = _or_like("d_ss", name_cols or [dkey], toks)
+            if like_dim: filters.append(like_dim)
+        if "sold_to_party_name" in fact_cols:
+            like_fact = _or_like("p", ["sold_to_party_name"], toks)
+            if like_fact: filters.append(like_fact)
+
+    # Product
+    if "product" in confirmed_entities:
+        if _table_exists(engine,"tbl_product_master") and (not allowed or "tbl_product_master" in allowed):
+            keys = _first_working_key(engine, fact, "tbl_product_master") or ("material","product_id")
+            fkey, dkey = keys
+            join_sql += f'\nLEFT JOIN "tbl_product_master" d_prod ON p.{fkey} = d_prod.{dkey}'
+            prod_cols = [c for c in ("base_pack_design_name","product_name","material_description","product","material") if c in _columns(engine,"tbl_product_master")]
+            like_dim = _or_like("d_prod", prod_cols or [dkey], toks)
+            if like_dim: filters.append(like_dim)
+        prod_fact_cols = [c for c in ("product_name","material_description","base_pack_design_name","material") if c in fact_cols]
+        if prod_fact_cols:
+            like_fact = _or_like("p", prod_fact_cols, toks)
+            if like_fact: filters.append(like_fact)
+
+    return join_sql, filters
+
+# -------------------------------------------------------
+
 def create_sql_query(state: dict) -> dict:
     qtext = _question(state)
     engine: Engine = state.get("engine")
@@ -224,184 +355,309 @@ def create_sql_query(state: dict) -> dict:
         state.update(final_answer=True, query_result="-- Error: No DB engine.")
         return state
 
-    # Route (UI sets this, else infer)
     rp = (state.get("route_preference") or "").lower().strip()
     if rp not in ("primary","shipment"):
         rp = "shipment" if any(w in qtext.lower() for w in ("shipment","dispatch","secondary","delivery","invoice")) else "primary"
 
-    # Fact table
-    if rp == "primary":
-        fact = "tbl_primary" if _table_exists(engine,"tbl_primary") else None
-    else:
-        fact = None
-        for cand in ("tbl_shipment","tbl_dispatch","tbl_secondary","tbl_shipments"):
-            if _table_exists(engine, cand):
-                fact = cand; break
+    allowed = set(state.get("allowed_tables", []) or state.get("tables", []))
+    shipment_pref = ["tbl_shipment","tbl_dispatch","tbl_secondary","tbl_shipments"]
+    primary_pref  = ["tbl_primary"]
+    pref_list = primary_pref if rp == "primary" else shipment_pref
+    fact = None
+    for cand in pref_list:
+        if allowed and cand not in allowed: continue
+        if _table_exists(engine, cand): fact = cand; break
     if not fact:
         state.update(final_answer=True, query_result=f"-- Error: {rp} table not available in DB.")
         return state
 
     fact_cols = _existing_cols(engine, fact)
 
-    # Time window (explicit only)
+    # time & measure
     window = _parse_window(qtext)
     date_col = _pick_date(engine, fact)
-
-    # Metric
-    metric_hint = _parse_metric_hint(qtext)
+    metric_hint = ("value" if any(k in qtext.lower() for k in ("value","amount","rs","₹","inr"))
+                   else "qty" if any(k in qtext.lower() for k in ("qty","quantity","units","pieces","pcs","billed","sold"))
+                   else "auto")
     measure = _pick_measure(engine, fact, metric_hint)
     if not measure:
         state.update(final_answer=True, query_result=f"-- Error: Could not pick a numeric measure from {fact}.")
         return state
 
-    # Tokens for LIKE searches (e.g., 'bhujia')
+    # entity filters (tokens, not enumerated values)
+    entity_join_sql, entity_filters = _build_entity_filters(state, engine, fact, fact_cols)
+
+    # time filters
+    time_filters: List[str] = []
+    abs_day = _parse_absolute_date(qtext)
+    if abs_day and date_col:
+        time_filters.append(f"DATE(p.{date_col}) = DATE '{abs_day}'")
+    my = _parse_month_year(qtext)
+    if my and date_col:
+        mon, yr = my
+        if yr:
+            time_filters.append(f"EXTRACT(MONTH FROM p.{date_col}) = {mon} AND EXTRACT(YEAR  FROM p.{date_col}) = {yr}")
+        else:
+            time_filters.append(f"EXTRACT(MONTH FROM p.{date_col}) = {mon} AND EXTRACT(YEAR  FROM p.{date_col}) = EXTRACT(YEAR FROM CURRENT_DATE)")
+    if window == "1 months" and date_col:
+        time_filters.append(
+            f"p.{date_col} >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month') AND "
+            f"p.{date_col} <  date_trunc('month', CURRENT_DATE)"
+        )
+    elif window and date_col and not abs_day and not my:
+        time_filters.append(f"p.{date_col} >= (CURRENT_DATE - INTERVAL '{window}')")
+
+    where_entity_sql = ("WHERE " + " AND ".join(entity_filters)) if entity_filters else ""
+    where_all_sql    = ("WHERE " + " AND ".join([*entity_filters, *time_filters])) if (entity_filters or time_filters) else ""
+
+    t = qtext.lower().strip()
     toks = _tokens(qtext)
 
-    # Entity detection from previous node (actor/product)
-    identified_entity = (state.get("identified_entity") or "").lower()
-    matched_value = state.get("matched_entity_value")
-    confidence = float(state.get("confidence") or 0.0)
-    physical_col = state.get("entity_physical_col")  # e.g., 'tbl_superstockist_master.superstockist_name'
+    # ----- pattern: highest growing SKU across each distributor (MoM) -----
+    if (
+        _any_terms(t, ["highest","top","most"]) and
+        _any_terms(t, ["growth","growing","mom","m-o-m"]) and
+        _any_terms(t, ["sku","product","material"]) and
+        _any_terms(t, ["distributor"]) and
+        date_col
+    ):
+        dist_key, dist_label, join_sql = _resolve_distributor_key_label(engine, fact, allowed, entity_join_sql, fact_cols)
+        have_prod = _table_exists(engine, "tbl_product_master") and (not allowed or "tbl_product_master" in allowed)
+        pj = ""
+        if have_prod:
+            jk = _find_product_join_keys(engine, fact)
+            if jk:
+                fkey, dkey = jk
+                pj = f'\nLEFT JOIN "tbl_product_master" d_prod ON p.{fkey} = d_prod.{dkey}'
+        sku_label = _product_display_expr(engine, fact_cols, have_prod)
 
-    # We only do a grouping if the user asked for a list/breakdown
-    topn = _parse_topn(qtext)
-    breakdown_kind = _breakdown_kind_from_text(qtext)
-    wants_list = topn is not None or breakdown_kind is not None
-
-    # Build filters
-    filters: List[str] = []
-    join_sql = ""
-
-    if window and date_col:
-        filters.append(f"p.{date_col} >= (CURRENT_DATE - INTERVAL '{window}')")
-
-    # --------- ACTOR FILTERS (superstockist/distributor) ----------
-    def _add_superstockist_filter():
-        nonlocal join_sql
-        # Shipment: prefer direct name column
-        if "sold_to_party_name" in fact_cols:
-            # use matched value if decent; also allow name tokens from query
-            if matched_value and confidence >= 0.30:
-                filters.append(f"LOWER(p.sold_to_party_name) ILIKE LOWER('%{matched_value}%')")
-            # add loose tokens, too (e.g., 'marke')
-            name_like = _or_like("p", ["sold_to_party_name"], toks)
-            if name_like: filters.append(name_like)
-        else:
-            # Join to superstockist master via best key
-            dim = "tbl_superstockist_master"
-            if _table_exists(engine, dim):
-                keys = _first_working_key(engine, fact, dim) or ("sold_to_party","superstockist_id")
-                fkey, dkey = keys
-                join_sql += f'\nLEFT JOIN "{dim}" d_ss ON p.{fkey} = d_ss.{dkey}'
-                dim_cols = _existing_cols(engine, dim)
-                name_col = "superstockist_name" if "superstockist_name" in dim_cols else dkey
-                if matched_value and confidence >= 0.30:
-                    filters.append(f"LOWER(d_ss.{name_col}) ILIKE LOWER('%{matched_value}%')")
-                name_like = _or_like("d_ss", [name_col], toks)
-                if name_like: filters.append(name_like)
-
-    def _add_distributor_filter():
-        nonlocal join_sql
-        if rp == "primary":
-            if "distributor_name" in fact_cols:
-                if matched_value and confidence >= 0.50:
-                    filters.append(f"LOWER(p.distributor_name) ILIKE LOWER('%{matched_value}%')")
-                name_like = _or_like("p", ["distributor_name"], toks)
-                if name_like: filters.append(name_like)
-            else:
-                dim = "tbl_distributor_master"
-                if _table_exists(engine, dim):
-                    keys = _first_working_key(engine, fact, dim) or ("distributor_id","distributor_erp_id")
-                    fkey, dkey = keys
-                    join_sql += f'\nLEFT JOIN "{dim}" d_dist ON p.{fkey} = d_dist.{dkey}'
-                    dim_cols = _existing_cols(engine, dim)
-                    name_col = "distributor_name" if "distributor_name" in dim_cols else dkey
-                    if matched_value and confidence >= 0.50:
-                        filters.append(f"LOWER(d_dist.{name_col}) ILIKE LOWER('%{matched_value}%')")
-                    name_like = _or_like("d_dist", [name_col], toks)
-                    if name_like: filters.append(name_like)
-
-    # Apply actor filters based on either explicit hint or detector
-    explicit_kind = _explicit_entity_from_text(qtext)
-    if (explicit_kind == "superstockist") or ("superstockist" in identified_entity):
-        _add_superstockist_filter()
-    if rp == "primary" and ((explicit_kind == "distributor") or ("distributor" in identified_entity)):
-        _add_distributor_filter()
-
-    # --------- PRODUCT TEXT FILTERS ----------
-    product_text_cols = [c for c in ("product_name","material_description","base_pack_design_name","material") if c in fact_cols]
-    prod_like = _or_like("p", product_text_cols, toks)
-    if prod_like:
-        filters.append(prod_like)
-
-    # WHERE
-    where_sql = ("WHERE " + " AND ".join(filters)) if filters else ""
-
-    # --------- OUTPUT SHAPE ----------
-    if wants_list:
-        # Determine grouping column based on breakdown/topn intent
-        # Default product grouping if not specified
-        g_key, g_name, g_join = None, None, ""
-        if breakdown_kind == "superstockist":
-            if "sold_to_party_name" in fact_cols:
-                g_key, g_name = "p.sold_to_party", "p.sold_to_party_name" if "sold_to_party" in fact_cols else "p.sold_to_party_name"
-            else:
-                dim = "tbl_superstockist_master"
-                if _table_exists(engine, dim):
-                    keys = _first_working_key(engine, fact, dim) or ("sold_to_party","superstockist_id")
-                    fkey, dkey = keys
-                    g_join = f'\nLEFT JOIN "{dim}" d_gss ON p.{fkey} = d_gss.{dkey}'
-                    dim_cols = _existing_cols(engine, dim)
-                    name_col = "superstockist_name" if "superstockist_name" in dim_cols else dkey
-                    g_key, g_name = f"p.{fkey}", f"d_gss.{name_col}"
-        elif breakdown_kind == "distributor" and rp == "primary":
-            if "distributor_name" in fact_cols:
-                g_key, g_name = "p.distributor_id" if "distributor_id" in fact_cols else "p.distributor_name", "p.distributor_name"
-            else:
-                dim = "tbl_distributor_master"
-                if _table_exists(engine, dim):
-                    keys = _first_working_key(engine, fact, dim) or ("distributor_id","distributor_erp_id")
-                    fkey, dkey = keys
-                    g_join = f'\nLEFT JOIN "{dim}" d_gd ON p.{fkey} = d_gd.{dkey}'
-                    name_col = "distributor_name" if "distributor_name" in _existing_cols(engine, dim) else dkey
-                    g_key, g_name = f"p.{fkey}", f"d_gd.{name_col}"
-        else:
-            # product grouping
-            if "material" in fact_cols:
-                g_key = "p.material"
-                g_name = "p.material_description" if "material_description" in fact_cols else None
-            elif "product_id" in fact_cols:
-                g_key = "p.product_id"
-                g_name = "p.product_name" if "product_name" in fact_cols else None
-
-        gb = ", ".join([x for x in [g_key, g_name] if x])
-        name_sql = f", {g_name} AS display_name" if g_name else ""
-        extra_join = g_join
-
-        limit_sql = f"\nLIMIT {int(topn)}" if topn else ""
         sql = f"""
-SELECT
-  {g_key} AS entity_key{name_sql},
-  SUM(p.{measure}) AS total_sales
-FROM "{fact}" p{join_sql}{extra_join}
-{where_sql}
-GROUP BY {gb}
-ORDER BY SUM(p.{measure}) DESC{limit_sql}
+WITH latest_month_per_dist AS (
+  SELECT {dist_key} AS dist_key, date_trunc('month', MAX(p.{date_col})) AS m0_start
+  FROM "{fact}" p{join_sql}
+  {where_entity_sql}
+  GROUP BY dist_key
+), base AS (
+  SELECT
+    {dist_label} AS distributor,
+    {sku_label} AS sku,
+    SUM(CASE WHEN p.{date_col} >= b.m0_start AND p.{date_col} < b.m0_start + INTERVAL '1 month' THEN p.{measure} END) AS m0,
+    SUM(CASE WHEN p.{date_col} >= b.m0_start - INTERVAL '1 month' AND p.{date_col} < b.m0_start THEN p.{measure} END) AS m1
+  FROM "{fact}" p
+  LEFT JOIN latest_month_per_dist b ON {dist_key} = b.dist_key
+  {join_sql}{pj}
+  {where_entity_sql}
+  GROUP BY {dist_label}, {sku_label}
+), ranked AS (
+  SELECT *,
+         CASE WHEN COALESCE(m1,0)=0 THEN NULL
+              ELSE (COALESCE(m0,0)-COALESCE(m1,0))/NULLIF(COALESCE(m1,0),0)
+          END AS mom_growth,
+         ROW_NUMBER() OVER (PARTITION BY distributor
+                            ORDER BY
+                              CASE WHEN COALESCE(m1,0)=0 THEN -1
+                                   ELSE (COALESCE(m0,0)-COALESCE(m1,0))/NULLIF(COALESCE(m1,0),0) END
+                              DESC NULLS LAST) AS rk
+  FROM base
+)
+SELECT distributor, sku, m0, m1, mom_growth
+FROM ranked
+WHERE rk = 1
+ORDER BY distributor
 """.strip()
-        state["sql_query"] = sql
-        state["final_answer"] = False
-        state["route"] = rp
+        state.update(sql_query=sql, final_answer=False, route=rp)
         return state
 
-    # Otherwise: single SUM over filtered rows (your “total sales by sb marke for Bhujia product” case)
+    # ----- pattern: overall top MoM SKU -----
+    if _any_terms(t, ["which","what","top","most","highest"]) and _any_terms(t, ["growth","growing","mom","m-o-m"]) and date_col:
+        have_prod = _table_exists(engine, "tbl_product_master") and (not allowed or "tbl_product_master" in allowed)
+        pj = ""
+        if have_prod:
+            jk = _find_product_join_keys(engine, fact)
+            if jk:
+                fkey, dkey = jk
+                pj = f'\nLEFT JOIN "tbl_product_master" d_prod ON p.{fkey} = d_prod.{dkey}'
+        sku_label = _product_display_expr(engine, fact_cols, have_prod)
+
+        sql = f"""
+WITH latest_month AS (
+  SELECT date_trunc('month', MAX(p.{date_col})) AS m0_start
+  FROM "{fact}" p{entity_join_sql}
+  {where_entity_sql}
+), base AS (
+  SELECT
+    {sku_label} AS sku,
+    SUM(CASE WHEN p.{date_col} >= b.m0_start AND p.{date_col} < b.m0_start + INTERVAL '1 month' THEN p.{measure} END) AS m0,
+    SUM(CASE WHEN p.{date_col} >= b.m0_start - INTERVAL '1 month' AND p.{date_col} < b.m0_start THEN p.{measure} END) AS m1
+  FROM "{fact}" p, latest_month b{pj}
+  {entity_join_sql}
+  {where_entity_sql}
+  GROUP BY {sku_label}
+)
+SELECT sku, m0, m1,
+       CASE WHEN COALESCE(m1,0)=0 THEN NULL ELSE (COALESCE(m0,0)-COALESCE(m1,0))/NULLIF(COALESCE(m1,0),0) END AS mom_growth
+FROM base
+ORDER BY mom_growth DESC NULLS LAST
+LIMIT 1
+""".strip()
+        state.update(sql_query=sql, final_answer=False, route=rp)
+        return state
+
+    # ----- pattern: top selling SKU of each distributor (Top N optional) -----
+    if _any_terms(t, ["top","best","highest","most"]) and _any_terms(t, ["sku","product","material"]) and _any_terms(t, ["distributor"]):
+        topn = _parse_topn(qtext) or 1
+        dist_key, dist_label, join_sql = _resolve_distributor_key_label(engine, fact, allowed, entity_join_sql, fact_cols)
+        have_prod = _table_exists(engine, "tbl_product_master") and (not allowed or "tbl_product_master" in allowed)
+        pj = ""
+        if have_prod:
+            jk = _find_product_join_keys(engine, fact)
+            if jk:
+                fkey, dkey = jk
+                pj = f'\nLEFT JOIN "tbl_product_master" d_prod ON p.{fkey} = d_prod.{dkey}'
+        sku_label = _product_display_expr(engine, fact_cols, have_prod)
+
+        sql = f"""
+WITH agg AS (
+  SELECT
+    {dist_label} AS distributor,
+    {sku_label} AS sku,
+    SUM(p.{measure}) AS total_qty
+  FROM "{fact}" p{join_sql}{pj}
+  {where_all_sql}
+  GROUP BY {dist_label}, {sku_label}
+), ranked AS (
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY distributor ORDER BY total_qty DESC NULLS LAST) AS rk
+  FROM agg
+)
+SELECT distributor, sku, total_qty
+FROM ranked
+WHERE rk <= {int(topn)}
+ORDER BY distributor, total_qty DESC
+""".strip()
+        state.update(sql_query=sql, final_answer=False, route=rp)
+        return state
+
+    # ----- pattern: area/state/region wise sales (last month supported) -----
+    if _any_terms(t, ["area wise","area-wise","state wise","region wise","city wise","area","state","region","city"]):
+        geo_key, geo_label, join_sql, geo_cols = _resolve_geo_label(engine, fact, allowed, entity_join_sql, fact_cols)
+        # If user typed a specific region token, add LIKE across available geo cols
+        geo_like = _or_like("p", [c for c in geo_cols if c in fact_cols], toks) if geo_cols else None
+        filters = [*entity_filters, *time_filters]
+        if geo_like: filters.append(geo_like)
+        where_geo_sql = "WHERE " + " AND ".join(filters) if filters else ""
+        sql = f"""
+SELECT
+  {geo_label} AS area,
+  SUM(p.{measure}) AS total
+FROM "{fact}" p{join_sql}
+{where_geo_sql}
+GROUP BY {geo_label}
+ORDER BY total DESC NULLS LAST
+""".strip()
+        state.update(sql_query=sql, final_answer=False, route=rp)
+        return state
+
+    # ----- pattern: top N SKU across each area -----
+    if _any_terms(t, ["top"]) and _any_terms(t, ["sku","product","material"]) and _any_terms(t, ["area","state","region","city"]):
+        topn = _parse_topn(qtext) or 5
+        geo_key, geo_label, join_sql, _ = _resolve_geo_label(engine, fact, allowed, entity_join_sql, fact_cols)
+        have_prod = _table_exists(engine, "tbl_product_master") and (not allowed or "tbl_product_master" in allowed)
+        pj = ""
+        if have_prod:
+            jk = _find_product_join_keys(engine, fact)
+            if jk:
+                fkey, dkey = jk
+                pj = f'\nLEFT JOIN "tbl_product_master" d_prod ON p.{fkey} = d_prod.{dkey}'
+        sku_label = _product_display_expr(engine, fact_cols, have_prod)
+
+        sql = f"""
+WITH agg AS (
+  SELECT
+    {geo_label} AS area,
+    {sku_label} AS sku,
+    SUM(p.{measure}) AS total_qty
+  FROM "{fact}" p{join_sql}{pj}
+  {where_all_sql}
+  GROUP BY {geo_label}, {sku_label}
+), ranked AS (
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY area ORDER BY total_qty DESC NULLS LAST) AS rk
+  FROM agg
+)
+SELECT area, sku, total_qty
+FROM ranked
+WHERE rk <= {int(topn)}
+ORDER BY area, total_qty DESC
+""".strip()
+        state.update(sql_query=sql, final_answer=False, route=rp)
+        return state
+
+    # ----- pattern: distinct products threshold (entity == superstockist|distributor) -----
+    m = re.search(r"(super\s*stockist|distributor)s?.*?(?:sold|buy|bought).*?more\s+than\s+(\d+)\s+distinct\s+products", t)
+    if m and date_col:
+        entity_kind = "superstockist" if "super" in m.group(1) else "distributor"
+        N = int(m.group(2))
+        if entity_kind == "distributor":
+            ent_key, ent_label, join_sql = _resolve_distributor_key_label(engine, fact, allowed, entity_join_sql, fact_cols)
+        else:
+            join_sql = entity_join_sql
+            if _table_exists(engine, "tbl_superstockist_master") and (not allowed or "tbl_superstockist_master" in allowed):
+                jk = _first_working_key(engine, fact, "tbl_superstockist_master") or ("sold_to_party","superstockist_id")
+                fkey, dkey = jk
+                join_sql += f'\nLEFT JOIN "tbl_superstockist_master" d_ss ON p.{fkey} = d_ss.{dkey}'
+                dcols = _columns(engine,"tbl_superstockist_master")
+                ent_key, ent_label = f"d_ss.{dkey}", ("d_ss.superstockist_name" if "superstockist_name" in dcols else f"d_ss.{dkey}")
+            elif "sold_to_party_name" in fact_cols:
+                ent_key, ent_label = "p.sold_to_party", "p.sold_to_party_name"
+            else:
+                ent_key, ent_label = "1", "'(unknown)'"
+        prod_key = "p.product_id" if "product_id" in fact_cols else ("p.material" if "material" in fact_cols else "p.product_name")
+        sql = f"""
+SELECT
+  {ent_label} AS entity,
+  COUNT(DISTINCT {prod_key}) AS distinct_products
+FROM "{fact}" p{join_sql}
+{where_all_sql}
+GROUP BY {ent_label}
+HAVING COUNT(DISTINCT {prod_key}) > {int(N)}
+ORDER BY distinct_products DESC
+""".strip()
+        state.update(sql_query=sql, final_answer=False, route=rp)
+        return state
+
+    # ----- pattern: quantity threshold for distributors (e.g., "less than 10 qty distributors") -----
+    thr = _parse_threshold(qtext)
+    if thr and _any_terms(t, ["distributor"]):
+        op, n = thr
+        dist_key, dist_label, join_sql = _resolve_distributor_key_label(engine, fact, allowed, entity_join_sql, fact_cols)
+        sql = f"""
+SELECT
+  {dist_label} AS distributor,
+  SUM(p.{measure}) AS total_qty
+FROM "{fact}" p{join_sql}
+{where_all_sql}
+GROUP BY {dist_label}
+HAVING SUM(p.{measure}) {op} {n}
+ORDER BY total_qty ASC
+""".strip()
+        state.update(sql_query=sql, final_answer=False, route=rp)
+        return state
+
+    # ----- pattern: last sales (date) possibly with product & region filters -----
+    if _any_terms(t, ["last sale","last sales","last sold","last invoice"]) and date_col:
+        sql = f"""
+SELECT MAX(p.{date_col}) AS last_sales_date
+FROM "{fact}" p{entity_join_sql}
+{where_all_sql}
+""".strip()
+        state.update(sql_query=sql, final_answer=False, route=rp)
+        return state
+
+    # ----- default: SUM total with whatever filters -----
     sql = f"""
 SELECT
   SUM(p.{measure}) AS total_value
-FROM "{fact}" p{join_sql}
-{where_sql}
+FROM "{fact}" p{entity_join_sql}
+{where_all_sql}
 """.strip()
-
-    state["sql_query"] = sql
-    state["final_answer"] = False
-    state["route"] = rp
+    state.update(sql_query=sql, final_answer=False, route=rp)
     return state

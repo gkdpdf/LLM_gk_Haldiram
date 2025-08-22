@@ -6,13 +6,17 @@ from sqlalchemy.engine import Engine
 
 def find_tables_node(state: Dict) -> Dict:
     """
-    Exact allowlist rule:
-      - Primary  -> all tables except 'tbl_shipment'
-      - Shipment -> all tables except 'tbl_primary'
-    Masters remain allowed in both.
+    If UI passed state['allowed_tables'], use it.
+    Else inspect DB and filter by route:
+      - Primary  -> all except 'tbl_shipment'
+      - Shipment -> all except 'tbl_primary'
     """
     engine: Engine = state.get("engine")
     route = (state.get("route_preference") or "").lower().strip()
+
+    if state.get("allowed_tables"):
+        state["tables"] = list(state["allowed_tables"])
+        return state
 
     if engine is None:
         state["tables"] = []
