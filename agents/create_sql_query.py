@@ -100,5 +100,6 @@ Return **only** a valid SQL query as text. No markdown, no comments, no explanat
         "tables": ", ".join(sql_tables)
     })
     cleaned_sql_query = re.sub(r"^```sql\s*|```$", "", output.strip(), flags=re.IGNORECASE).strip()
-    state["sql_query"] = cleaned_sql_query
+    state["sql_before_filter_query"] = cleaned_sql_query
+    print("Debugging create sql query", state.keys())
     return state

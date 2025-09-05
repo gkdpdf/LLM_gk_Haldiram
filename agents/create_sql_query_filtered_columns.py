@@ -146,6 +146,6 @@ def create_sql_query(state: dict) -> dict:
     })
 
     # Update state
-    state["sql_query"] = raw_output.sql_query
+    state["sql_before_filter_query"] = raw_output.sql_query
     state["filter_extractor"] = raw_output.filters
     return state

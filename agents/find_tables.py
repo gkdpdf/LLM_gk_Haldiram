@@ -19,6 +19,7 @@ AllowedTables = Literal[
     "tbl_Primary",
     "tbl_Product_Master",
     "tbl_superstockist_master",
+    "tbl_shipment"
 ]
 
 

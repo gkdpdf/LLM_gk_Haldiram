@@ -17,7 +17,7 @@ llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 def add_filter_sql_query(state: dict) -> dict:
     # Inputs from state
-    query = state["sql_query"]
+    before_filter_query = state["sql_before_filter_query"]
     filters = state["fuzz_match"]  # e.g. ["yes", ["orders","payment_type","credit card, boleto"], ...]
 
     # Early exit if no filters
@@ -33,6 +33,7 @@ def add_filter_sql_query(state: dict) -> dict:
             pass
 
     filters_json = json.dumps(filters, ensure_ascii=False)
+    print("filters json", filters_json)
 
     sql_query_prompt = ChatPromptTemplate.from_messages([
         ("system",
@@ -42,6 +43,10 @@ def add_filter_sql_query(state: dict) -> dict:
         ("system",
          "Rewrite rules:\n"
          "1) Do NOT rename or remove existing tables, columns, joins, or predicates.\n"
+         "2) Treat the ENTIRE `filter_value` string literally, exactly as provided in JSON. "
+            "   - Do NOT split it by spaces, pipes (|), dashes, or special characters.\n"
+            "   - Even if it contains spaces or symbols (like 'Palak Sev MRP 10|40 GM*10 KG'), "
+            "     keep the WHOLE thing as one string literal.\n"
          "4) Respect existing table aliases (e.g., use 'tp.channel' not 'tbl_Primary.channel').\n"
          "5) Only apply string filters from the filter list. For multiple values on the same (table, column), use IN ('v1','v2',...).\n"
          "6) Filter list shape is one of:\n"
@@ -59,7 +64,7 @@ def add_filter_sql_query(state: dict) -> dict:
 
     chain = sql_query_prompt | llm | StrOutputParser()
     output = chain.invoke({
-        "query": query,
+        "query": before_filter_query,
         "filters_json": filters_json
     })
 
@@ -67,4 +72,5 @@ def add_filter_sql_query(state: dict) -> dict:
     cleaned_sql_query = re.sub(r"^```(?:sql)?\s*|\s*```$", "", output.strip(), flags=re.IGNORECASE).strip()
 
     state["sql_query"] = cleaned_sql_query
+    print("Debugging add filter sql query", state.keys())
     return state

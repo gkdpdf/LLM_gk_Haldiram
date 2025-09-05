@@ -18,11 +18,17 @@ llm = ChatOpenAI(model="gpt-4.1-nano", temperature=0)
 query_clean_prompt = ChatPromptTemplate.from_messages([
     ("system", f"""
      You are a product manager for a Text-to-SQL system. 
+     
      You will be given:
      - User's natural language query
      - Database schema in markdown format
 
      Your job is to rewrite the query clearly and concisely.
+     
+     Important instructions:
+        - The manufacturing plant sell items to super stockists whose data is present in the tbl_shipment
+        - the super stockists sell items to distributors whose data is present in tbl_primary
+        - the items sold to distributors signifies the demand in market
      
      Rules:
      - Always keep the output in **bullet point format**.
