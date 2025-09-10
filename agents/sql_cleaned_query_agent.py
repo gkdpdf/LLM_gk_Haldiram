@@ -1,6 +1,8 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.callbacks import adispatch_custom_event
+from langchain_core.runnables import RunnableConfig
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -45,9 +47,14 @@ query_clean_prompt = ChatPromptTemplate.from_messages([
 
 chain = query_clean_prompt | llm | StrOutputParser()
 
-def clean_query_node(state:dict) -> dict:
+async def clean_query_node(state:dict, config:RunnableConfig) -> dict:
     user_query = state["user_query"]
     cleaned_query = chain.invoke({"user_query" : user_query})
     state["cleaned_user_query"] = cleaned_query
+    await adispatch_custom_event(
+        "cleaned_query",
+        {"cleaned_user_query": cleaned_query},
+        config=config
+    )
     return state
  

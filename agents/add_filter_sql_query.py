@@ -1,6 +1,8 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.callbacks import adispatch_custom_event
+from langchain_core.runnables.config import RunnableConfig
 from tools.date_tool import get_current_date
 from dotenv import load_dotenv
 import pickle
@@ -15,7 +17,7 @@ load_dotenv(override=True)
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 
-def add_filter_sql_query(state: dict) -> dict:
+async def add_filter_sql_query(state: dict, config:RunnableConfig) -> dict:
     # Inputs from state
     before_filter_query = state["sql_before_filter_query"]
     filters = state["fuzz_match"]  # e.g. ["yes", ["orders","payment_type","credit card, boleto"], ...]
@@ -70,7 +72,13 @@ def add_filter_sql_query(state: dict) -> dict:
 
     # Remove accidental fences if any
     cleaned_sql_query = re.sub(r"^```(?:sql)?\s*|\s*```$", "", output.strip(), flags=re.IGNORECASE).strip()
-
+    
+    # send  the event to the UI
+    await adispatch_custom_event(
+        "add_filter_sql_query",
+        {"sql_query":cleaned_sql_query},
+        config=config
+    )
     state["sql_query"] = cleaned_sql_query
     print("Debugging add filter sql query", state.keys())
     return state

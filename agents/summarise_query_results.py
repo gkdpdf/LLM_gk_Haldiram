@@ -2,6 +2,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI
 from langchain_community.utilities import SQLDatabase
+from langchain_core.callbacks import adispatch_custom_event
+from langchain_core.runnables import RunnableConfig                                                                                                                                                                                                                                                                                               
 from dotenv import load_dotenv
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
@@ -18,9 +20,14 @@ result_summary_prompt = ChatPromptTemplate.from_messages([
 
 result_summary_chain = result_summary_prompt | llm | StrOutputParser()
 
-def summarise_results(state:dict) -> dict:
+async def summarise_results(state:dict, config:RunnableConfig) -> dict:
     sql_query = state["sql_query"]
     raw_result = state["dataframe"]
+    await adispatch_custom_event(
+        "summarise_results",
+        {"summarise_results": "done"},
+        config=config
+    )
     if len(raw_result) > 0:
         summary = result_summary_chain.invoke({"sql_query" :sql_query, "query_result" : raw_result})
         state["summary_results"] = summary

@@ -2,6 +2,8 @@ from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
+from langchain_core.runnables import RunnableConfig
+from langchain_core.callbacks import adispatch_custom_event
 from pydantic import BaseModel, Field, RootModel
 from typing import List, Literal
 from dotenv import load_dotenv
@@ -67,8 +69,13 @@ Schema:
 # 🔹 Chain with StrOutputParser
 chain = query_clean_prompt | llm | table_list_parser
 
-def find_tables_node(state:dict) -> dict:
+async def find_tables_node(state:dict, config:RunnableConfig) -> dict:
     user_query = state["cleaned_user_query"]
     output = chain.invoke({"user_query" : user_query})
+    await adispatch_custom_event(
+        "tabls_found",
+        {"find_tables":output.root},
+        config=config
+        )
     state["tables"] = output.root
     return state

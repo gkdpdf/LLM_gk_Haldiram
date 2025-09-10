@@ -1,6 +1,8 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableConfig
+from langchain_core.callbacks import adispatch_custom_event
 from tools.date_tool import get_current_date
 from dotenv import load_dotenv
 import pickle
@@ -48,7 +50,7 @@ llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 today = get_today_str()
 
-def rewrite_sql_query(state: dict) -> dict:
+async def rewrite_sql_query(state: dict, config:RunnableConfig) -> dict:
     # Inputs from state
     state["retry_count"] = state.get("retry_count", 0) + 1
     sql_tables    = state["tables"]
@@ -119,5 +121,11 @@ Error message from database (may be empty if none):
 
     # Strip accidental code fences if any
     cleaned_sql_query = re.sub(r"^```sql\s*|^```\s*|```$", "", output.strip(), flags=re.IGNORECASE).strip()
+    # Create an event 
+    await adispatch_custom_event(
+        "rewrite_sql_query",
+        {"sql_query":cleaned_sql_query},
+        config=config
+    )
     state["sql_query"] = cleaned_sql_query
-    return state
+    return state                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             

@@ -12,6 +12,8 @@ from sqlalchemy.types import Integer, Float, String
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.callbacks import adispatch_custom_event
+from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langchain_community.utilities import SQLDatabase
 from dotenv import load_dotenv
@@ -75,10 +77,15 @@ result_summary_prompt = ChatPromptTemplate.from_messages([
 
 result_summary_chain = result_summary_prompt | llm | StrOutputParser()
 
-def execute_sql_query(state: dict) -> dict:
+async def execute_sql_query(state: dict, config:RunnableConfig) -> dict:
     sql_query = state["sql_query"]
     try:
         raw_result = db.run(sql_query)
+        await adispatch_custom_event(
+            "sql_query_execution",
+            {"sql_query_result" : raw_result},
+            config=config
+        )
         state["dataframe"] = raw_result
         state["query_results"] = "Query executed successfully"
     except Exception as e:

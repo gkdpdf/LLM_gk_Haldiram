@@ -9,6 +9,8 @@ from langchain.agents import initialize_agent, Tool
 from langchain.sql_database import SQLDatabase
 from langchain.agents.agent_types import AgentType
 from langchain.agents.agent_toolkits import SQLDatabaseToolkit
+from langchain_core.runnables import RunnableConfig
+from langchain_core.callbacks import adispatch_custom_event
 from sqlalchemy import create_engine
 import sqlite3
 from langchain_groq import ChatGroq
@@ -22,7 +24,7 @@ import requests
 import glob
 from sqlalchemy.types import Date
 from langgraph.types import interrupt, Command
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import MemorySaver
 import sqlparse
 import uuid
 import textwrap
@@ -173,7 +175,7 @@ class finalstate(TypedDict):
     failed_query: Annotated[List[str], operator.add]
     query_error_message: Annotated[List[str], operator.add]
     retry_count: int
-    is_empty_result: bool
+    # is_empty_result: bool
     sql_before_filter_query : str
     sql_query: str
     query_results: str
@@ -187,23 +189,39 @@ class finalstate(TypedDict):
 
 
 ### Create a node to check wether the query was failed or not
-def check_query_failed(state: finalstate) -> finalstate:
+async def check_query_failed(state: finalstate, config:RunnableConfig) -> finalstate:
     # if state["is_empty_result"]:
     #     return "empty_result" 
     if state["query_results"] == "Query executed successfully":
+        await adispatch_custom_event(
+            "wether_query_success",
+            {"query_ran_successfully":True},
+            config=config
+        )
         return "success"
     else:
+        await adispatch_custom_event(
+            "wether_query_success",
+            {"query_ran_successfully":False},
+            config=config
+        )
         return "failed"
 
 
 # In[34]:
 
 
-def fuzz_match(state: finalstate):
+async def fuzz_match(state: finalstate, config:RunnableConfig):
     val = state['filter_extractor']
     print("Solving for getting right filter vaues.........")
     lst = call_match(val)
     print("done filtering...........................")
+    await adispatch_custom_event(
+        "fuzzy_match",
+        {"fuzz_match":lst},
+        config=config
+        )
+    
     return {"fuzz_match" : lst}
 
 
@@ -241,7 +259,7 @@ graph.add_edge('summarise_results', END)
 
 # Create a config 
 config = {"configurable" : {"thread_id" : str(uuid.uuid4())}}
-workflow = graph.compile(checkpointer=InMemorySaver())
+workflow = graph.compile(checkpointer=MemorySaver())
 
 
 # initial_state = {"user_query" : "sales of plak sev from manufacturing plants", "is_empty_result" : False}

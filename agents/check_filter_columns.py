@@ -84,7 +84,7 @@ Here is the user question:
 ])
 
 # 🔹 Chain with StrOutputParser
-chain = query_clean_prompt | llm | table_list_parser
+chain = template_filter_check | llm | table_list_parser
 
 def find_tables_node(state:dict) -> dict:
     user_query = state["cleaned_user_query"]

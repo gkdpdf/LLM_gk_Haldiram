@@ -3,18 +3,25 @@ from langgraph.types import interrupt
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.callbacks import adispatch_custom_event
+from langchain_core.runnables.config import RunnableConfig
 
-def review_cleaned_query_node(state: dict) -> dict:
+async def review_cleaned_query_node(state: dict, config:RunnableConfig) -> dict:
     """
     Human-in-the-loop step:
     Show cleaned query, take user feedback,
     and use LLM to rewrite the query accordingly.
     """
+    await adispatch_custom_event(
+        "take_feedback",
+        len(state["cleaned_user_query"]),
+        config=config
+    )
     # Ask user for feedback
     value = interrupt({
         "original_user_query": state["user_query"],
         "cleaned_query": state["cleaned_user_query"],
-        "message": "Do you want to change this query? Reply with new text or 'no'."
+        # "message": "Do you want to change this query? Reply with new text or 'no'."
     })
 
     # Case 1: User says 'no' -> keep existing cleaned query

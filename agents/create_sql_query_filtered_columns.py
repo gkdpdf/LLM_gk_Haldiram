@@ -3,6 +3,8 @@ from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
 from pydantic import BaseModel, Field, RootModel
 from typing import List, Union, Literal
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableConfig
+from langchain_core.callbacks import adispatch_custom_event
 from tools.date_tool import get_current_date
 from dotenv import load_dotenv
 import pickle
@@ -42,7 +44,7 @@ class SQLQueryWithFilters(BaseModel):
     sql_query : str
     filters : Union[FilterNo, FilterYes]
     
-def create_markdown_from_dict(annotated_dict: dict) -> str:
+async def create_markdown_from_dict(annotated_dict: dict) -> str:
     """
     Converts a dictionary of annotated table descriptions into markdown format.
 
@@ -63,7 +65,7 @@ llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 today = get_today_str()
 
-def create_sql_query(state: dict) -> dict:
+async def create_sql_query(state: dict, config:RunnableConfig) -> dict:
     sql_tables = state["tables"]
     user_query = state["cleaned_user_query"]
 
@@ -146,6 +148,14 @@ def create_sql_query(state: dict) -> dict:
     })
 
     # Update state
+    await adispatch_custom_event(
+        "check_sql_filters_exists",
+        {
+            "sql_before_filter_query":raw_output.sql_query,
+            "filter_extractor":raw_output.filters
+        },
+        config=config
+    )
     state["sql_before_filter_query"] = raw_output.sql_query
     state["filter_extractor"] = raw_output.filters
     return state
